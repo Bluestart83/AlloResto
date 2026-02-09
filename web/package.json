@@ -1,0 +1,33 @@
+{
+  "name": "voiceorder-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "db:sync": "ts-node src/db/sync.ts"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.11.3",
+    "chart.js": "^4.4.7",
+    "react-chartjs-2": "^5.2.0",
+    "next": "14.2.20",
+    "openai": "^4.77.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.20",
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.14",
+    "@types/react-dom": "^18.3.3",
+    "typescript": "^5.7.0"
+  }
+}

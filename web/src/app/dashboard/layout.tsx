@@ -1,0 +1,14 @@
+import Sidebar from "@/components/ui/Sidebar";
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="d-flex">
+      <Sidebar />
+      <div className="main-content flex-grow-1">{children}</div>
+    </div>
+  );
+}

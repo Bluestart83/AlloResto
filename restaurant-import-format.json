@@ -1,0 +1,204 @@
+{
+  "$schema": "https://voiceorder.ai/schemas/restaurant-import-v1.json",
+  "_description": "Format d'import complet pour onboarding restaurant — VoiceOrder AI",
+  "_version": "1.0.0",
+
+  "restaurant": {
+    "name": "Pizzeria Bella Napoli",
+    "cuisine_type": "pizza",
+    "address": "45 Rue Sainte",
+    "city": "Marseille",
+    "postal_code": "13001",
+    "country": "FR",
+    "phone": "+33491234567",
+    "email": "contact@bellanapoli.fr",
+    "website": "https://bellanapoli.fr",
+
+    "location": {
+      "lat": 43.2945,
+      "lng": 5.3725,
+      "google_place_id": "ChIJN1t_tDeuEmsRUsoyG83frY4"
+    },
+
+    "images": {
+      "logo": "https://...",
+      "cover": "https://...",
+      "gallery": [
+        "https://...",
+        "https://..."
+      ]
+    },
+
+    "opening_hours": {
+      "monday":    { "open": "11:00", "close": "14:30", "open2": "18:00", "close2": "23:00" },
+      "tuesday":   { "open": "11:00", "close": "14:30", "open2": "18:00", "close2": "23:00" },
+      "wednesday": { "open": "11:00", "close": "14:30", "open2": "18:00", "close2": "23:00" },
+      "thursday":  { "open": "11:00", "close": "14:30", "open2": "18:00", "close2": "23:00" },
+      "friday":    { "open": "11:00", "close": "14:30", "open2": "18:00", "close2": "23:30" },
+      "saturday":  { "open": "11:00", "close": "23:30" },
+      "sunday":    { "open": "18:00", "close": "23:00" },
+      "_comment": "open2/close2 pour coupure midi. null = fermé"
+    },
+
+    "delivery": {
+      "enabled": true,
+      "radius_km": 5.0,
+      "fee": 2.50,
+      "free_above": 25.00,
+      "min_order": 15.00,
+      "avg_prep_time_min": 30,
+      "estimated_delivery_min": 15
+    },
+
+    "payment_methods": ["cash", "card", "online"],
+
+    "ai_config": {
+      "voice": "sage",
+      "language": "fr",
+      "welcome_message": "Bienvenue chez Bella Napoli ! C'est pour une commande ou un renseignement ?",
+      "instructions": "Tu es l'assistant vocal de la Pizzeria Bella Napoli. Sois chaleureux et efficace. Propose les suggestions du jour quand c'est pertinent. Si le client hésite, recommande la Margherita ou la Napoli.",
+      "upsell_items": ["Tiramisu maison", "Supplément mozzarella di bufala"],
+      "out_of_hours_message": "Nous sommes actuellement fermés. Nos horaires sont du lundi au vendredi de 11h à 14h30 et de 18h à 23h."
+    }
+  },
+
+  "menu": {
+    "categories": [
+      {
+        "ref": "pizzas",
+        "name": "Pizzas",
+        "description": "Cuites au feu de bois",
+        "display_order": 1,
+        "image": "https://..."
+      },
+      {
+        "ref": "entrees",
+        "name": "Entrées",
+        "display_order": 0
+      },
+      {
+        "ref": "desserts",
+        "name": "Desserts",
+        "display_order": 2
+      },
+      {
+        "ref": "boissons",
+        "name": "Boissons",
+        "display_order": 3
+      }
+    ],
+
+    "items": [
+      {
+        "ref": "pizza-margherita",
+        "category_ref": "pizzas",
+        "name": "Margherita",
+        "description": "Sauce tomate, mozzarella, basilic frais",
+        "price": 9.50,
+        "image": "https://...",
+        "allergens": ["gluten", "lactose"],
+        "tags": ["populaire", "végétarien"],
+        "available": true,
+        "options": [
+          {
+            "name": "Taille",
+            "type": "single_choice",
+            "required": true,
+            "choices": [
+              { "label": "Normale (26cm)", "price_modifier": 0 },
+              { "label": "Grande (33cm)", "price_modifier": 3.00 },
+              { "label": "Familiale (40cm)", "price_modifier": 6.00 }
+            ]
+          },
+          {
+            "name": "Pâte",
+            "type": "single_choice",
+            "required": false,
+            "choices": [
+              { "label": "Classique", "price_modifier": 0 },
+              { "label": "Fine", "price_modifier": 0 },
+              { "label": "Épaisse", "price_modifier": 0 },
+              { "label": "Sans gluten", "price_modifier": 2.50 }
+            ]
+          },
+          {
+            "name": "Suppléments",
+            "type": "multi_choice",
+            "required": false,
+            "max_choices": 5,
+            "choices": [
+              { "label": "Mozzarella di bufala", "price_modifier": 2.00 },
+              { "label": "Jambon de Parme", "price_modifier": 2.50 },
+              { "label": "Roquette", "price_modifier": 1.00 },
+              { "label": "Oeuf", "price_modifier": 1.50 },
+              { "label": "Champignons frais", "price_modifier": 1.50 },
+              { "label": "Anchois", "price_modifier": 1.50 }
+            ]
+          }
+        ]
+      },
+      {
+        "ref": "pizza-napoli",
+        "category_ref": "pizzas",
+        "name": "Napoli",
+        "description": "Sauce tomate, mozzarella, anchois, câpres, olives",
+        "price": 11.50,
+        "allergens": ["gluten", "lactose", "poisson"],
+        "tags": [],
+        "options": [
+          {
+            "name": "Taille",
+            "type": "single_choice",
+            "required": true,
+            "choices": [
+              { "label": "Normale (26cm)", "price_modifier": 0 },
+              { "label": "Grande (33cm)", "price_modifier": 3.00 }
+            ]
+          }
+        ]
+      },
+      {
+        "ref": "tiramisu",
+        "category_ref": "desserts",
+        "name": "Tiramisu maison",
+        "description": "Recette traditionnelle au mascarpone",
+        "price": 7.50,
+        "allergens": ["gluten", "lactose", "oeufs"],
+        "tags": ["maison", "populaire"],
+        "options": []
+      },
+      {
+        "ref": "coca",
+        "category_ref": "boissons",
+        "name": "Coca-Cola",
+        "description": null,
+        "price": 3.00,
+        "options": [
+          {
+            "name": "Format",
+            "type": "single_choice",
+            "required": true,
+            "choices": [
+              { "label": "33cl", "price_modifier": 0 },
+              { "label": "1.5L", "price_modifier": 2.50 }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+
+  "_import_metadata": {
+    "source": "google_places+menu_scan",
+    "imported_at": "2026-02-09T14:30:00Z",
+    "imported_by": "auto",
+    "google_place_id": "ChIJN1t_tDeuEmsRUsoyG83frY4",
+    "menu_source": "photo_scan",
+    "confidence": 0.92,
+    "needs_review": ["items with estimated prices", "missing allergens"],
+    "raw_menu_photos": [
+      "uploads/menu_page1.jpg",
+      "uploads/menu_page2.jpg"
+    ]
+  }
+}
