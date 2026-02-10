@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const call = ds.getRepository(Call).create({
     ...body,
     startedAt: body.startedAt || new Date(),
-  });
+  } as Partial<Call>) as Call;
 
   const saved = await ds.getRepository(Call).save(call);
   return NextResponse.json(saved, { status: 201 });

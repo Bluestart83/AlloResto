@@ -9,10 +9,10 @@ import {
   OneToMany,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { Call } from "./Call";
-import { Customer } from "./Customer";
-import { OrderItem } from "./OrderItem";
+import type { Restaurant } from "./Restaurant";
+import type { Call } from "./Call";
+import type { Customer } from "./Customer";
+import type { OrderItem } from "./OrderItem";
 
 export type OrderStatus =
   | "pending"
@@ -23,7 +23,7 @@ export type OrderStatus =
   | "completed"
   | "cancelled";
 
-export type OrderType = "pickup" | "delivery";
+export type OrderType = "pickup" | "delivery" | "dine_in";
 export type PaymentMethod = "cash" | "card" | "online";
 
 @Entity("orders")
@@ -31,24 +31,24 @@ export class Order {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "restaurant_id" })
+  @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, (r) => r.orders)
+  @ManyToOne("Restaurant", "orders")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
-  @Column({ name: "call_id" })
-  callId!: string;
+  @Column({ name: "call_id", type: "varchar", nullable: true })
+  callId!: string | null;
 
-  @OneToOne(() => Call, (c) => c.order)
+  @OneToOne("Call", "order")
   @JoinColumn({ name: "call_id" })
   call!: Call;
 
-  @Column({ name: "customer_id", nullable: true })
+  @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne(() => Customer, (c) => c.orders, { nullable: true })
+  @ManyToOne("Customer", "orders", { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 
@@ -56,14 +56,14 @@ export class Order {
   orderNumber!: number | null;
 
   // Snapshot client au moment de la commande
-  @Column({ name: "customer_name", length: 255, nullable: true })
+  @Column({ name: "customer_name", type: "varchar", length: 255, nullable: true })
   customerName!: string | null;
 
-  @Column({ name: "customer_phone", length: 20 })
+  @Column({ name: "customer_phone", type: "varchar", length: 20 })
   customerPhone!: string;
 
   // Type et livraison
-  @Column({ name: "order_type", length: 20, default: "pickup" })
+  @Column({ name: "order_type", type: "varchar", length: 20, default: "pickup" })
   orderType!: OrderType;
 
   @Column({ name: "delivery_address", type: "text", nullable: true })
@@ -95,17 +95,27 @@ export class Order {
   deliveryFee!: number;
 
   // Status
-  @Column({ length: 50, default: "pending" })
+  @Column({ type: "varchar", length: 50, default: "pending" })
   status!: OrderStatus;
 
   @Column({ name: "estimated_ready_at", type: "datetime", nullable: true })
   estimatedReadyAt!: Date | null;
 
-  @Column({ name: "payment_method", length: 50, default: "cash" })
+  @Column({ name: "payment_method", type: "varchar", length: 50, default: "cash" })
   paymentMethod!: PaymentMethod;
 
   @Column({ type: "text", nullable: true })
   notes!: string | null;
+
+  // --- Planning fields ---
+  @Column({ name: "order_size", type: "varchar", length: 1, nullable: true })
+  orderSize!: "S" | "M" | "L" | null;
+
+  @Column({ name: "cook_start_at", type: "datetime", nullable: true })
+  cookStartAt!: Date | null;
+
+  @Column({ name: "handoff_at", type: "datetime", nullable: true })
+  handoffAt!: Date | null;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
@@ -114,6 +124,6 @@ export class Order {
   updatedAt!: Date;
 
   // --- Relations ---
-  @OneToMany(() => OrderItem, (oi) => oi.order, { cascade: true })
+  @OneToMany("OrderItem", "order", { cascade: true })
   items!: OrderItem[];
 }

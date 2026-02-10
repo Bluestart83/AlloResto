@@ -3,62 +3,118 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const navItems = [
-  { href: "/dashboard", icon: "bi-speedometer2", label: "Dashboard" },
-  { href: "/dashboard/orders", icon: "bi-bag-check", label: "Commandes" },
-  { href: "/dashboard/calls", icon: "bi-telephone", label: "Appels" },
-  { href: "/dashboard/menu", icon: "bi-book", label: "Menu" },
-  { href: "/dashboard/faq", icon: "bi-question-circle", label: "FAQ" },
-  { href: "/dashboard/customers", icon: "bi-people", label: "Clients" },
-  { href: "/import", icon: "bi-cloud-download", label: "Import resto" },
-];
+interface SidebarProps {
+  restaurantId?: string;
+  restaurantName?: string;
+}
 
-export default function Sidebar() {
+export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) {
   const pathname = usePathname();
+
+  const baseItems = [
+    { href: "/admin/customers", icon: "bi-people", label: "Clients" },
+    { href: "/admin/import", icon: "bi-cloud-download", label: "Import resto" },
+  ];
+
+  const restaurantItems = restaurantId
+    ? [
+        { href: `/place/${restaurantId}/dashboard`, icon: "bi-speedometer2", label: "Dashboard" },
+        { href: `/place/${restaurantId}/dashboard-demo`, icon: "bi-speedometer2", label: "Dashboard (Demo)" },
+        { href: `/place/${restaurantId}/planning`, icon: "bi-kanban", label: "Planning" },
+        { href: `/place/${restaurantId}/orders`, icon: "bi-bag-check", label: "Commandes" },
+        { href: `/place/${restaurantId}/reservations`, icon: "bi-calendar-check", label: "Reservations" },
+        { href: `/place/${restaurantId}/salles`, icon: "bi-door-open", label: "Salles & Tables" },
+        { href: `/place/${restaurantId}/messages`, icon: "bi-envelope", label: "Messages" },
+        { href: `/place/${restaurantId}/calls`, icon: "bi-telephone", label: "Appels" },
+        { href: `/place/${restaurantId}/menu`, icon: "bi-book", label: "Menu" },
+        { href: `/place/${restaurantId}/formules`, icon: "bi-collection", label: "Formules" },
+        { href: `/place/${restaurantId}/faq`, icon: "bi-question-circle", label: "FAQ" },
+      ]
+    : [];
+
+  const isActive = (href: string) => {
+    // Exact match for dashboard to avoid /dashboard matching /dashboard-demo
+    if (restaurantId && (href === `/place/${restaurantId}/dashboard` || href === `/place/${restaurantId}/dashboard-demo`)) {
+      return pathname === href;
+    }
+    return pathname.startsWith(href);
+  };
 
   return (
     <div className="sidebar d-flex flex-column">
       {/* Logo */}
       <div className="px-3 py-4 border-bottom border-dark">
-        <div className="d-flex align-items-center gap-2">
-          <div
-            className="d-flex align-items-center justify-content-center rounded-3"
-            style={{ width: 36, height: 36, backgroundColor: "var(--vo-primary)" }}
-          >
-            <i className="bi bi-telephone-fill text-white"></i>
-          </div>
-          <div>
-            <div className="text-white fw-bold" style={{ fontSize: "0.95rem" }}>
-              VoiceOrder AI
+        <Link href="/admin/customers" className="text-decoration-none">
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="d-flex align-items-center justify-content-center rounded-3"
+              style={{ width: 36, height: 36, backgroundColor: "var(--vo-primary)" }}
+            >
+              <i className="bi bi-telephone-fill text-white"></i>
             </div>
-            <div className="text-secondary" style={{ fontSize: "0.7rem" }}>
-              Dashboard
+            <div>
+              <div className="text-white fw-bold" style={{ fontSize: "0.95rem" }}>
+                VoiceOrder AI
+              </div>
+              <div className="text-secondary" style={{ fontSize: "0.7rem" }}>
+                Dashboard
+              </div>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Status */}
-      <div className="px-3 py-2">
-        <div className="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
-          style={{ backgroundColor: "rgba(16,185,129,0.1)" }}>
-          <span className="live-dot"></span>
-          <span style={{ color: "#10b981", fontSize: "0.8rem", fontWeight: 500 }}>
-            IA Active
-          </span>
+      {restaurantId && (
+        <div className="px-3 py-2">
+          <div
+            className="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+            style={{ backgroundColor: "rgba(16,185,129,0.1)" }}
+          >
+            <span className="live-dot"></span>
+            <span style={{ color: "#10b981", fontSize: "0.8rem", fontWeight: 500 }}>
+              IA Active
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-grow-1 py-2">
+        {restaurantId && (
+          <>
+            <div className="px-3 mb-1">
+              <small className="text-secondary text-uppercase" style={{ fontSize: "0.65rem", letterSpacing: "0.05em" }}>
+                Restaurant
+              </small>
+            </div>
+            <ul className="nav flex-column mb-3">
+              {restaurantItems.map((item) => (
+                <li className="nav-item" key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={`nav-link d-flex align-items-center ${isActive(item.href) ? "active" : ""}`}
+                  >
+                    <i className={`bi ${item.icon}`}></i>
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <hr className="border-dark mx-3 my-1" />
+          </>
+        )}
+        <div className="px-3 mb-1 mt-2">
+          <small className="text-secondary text-uppercase" style={{ fontSize: "0.65rem", letterSpacing: "0.05em" }}>
+            Admin
+          </small>
+        </div>
         <ul className="nav flex-column">
-          {navItems.map((item) => (
+          {baseItems.map((item) => (
             <li className="nav-item" key={item.href}>
               <Link
                 href={item.href}
-                className={`nav-link d-flex align-items-center ${
-                  pathname === item.href ? "active" : ""
-                }`}
+                className={`nav-link d-flex align-items-center ${isActive(item.href) ? "active" : ""}`}
               >
                 <i className={`bi ${item.icon}`}></i>
                 {item.label}
@@ -70,11 +126,16 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-3 py-3 border-top border-dark">
-        <div className="text-secondary" style={{ fontSize: "0.7rem" }}>
-          Pizzeria Bella Napoli
-        </div>
-        <Link href="/dashboard/settings" className="nav-link px-0 py-1"
-          style={{ fontSize: "0.8rem" }}>
+        {restaurantName && (
+          <div className="text-secondary mb-1" style={{ fontSize: "0.7rem" }}>
+            {restaurantName}
+          </div>
+        )}
+        <Link
+          href={restaurantId ? `/place/${restaurantId}/settings` : "/admin/settings"}
+          className="nav-link px-0 py-1"
+          style={{ fontSize: "0.8rem" }}
+        >
           <i className="bi bi-gear me-1"></i>Paramètres
         </Link>
       </div>

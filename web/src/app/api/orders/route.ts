@@ -4,6 +4,8 @@ import { Order } from "@/db/entities/Order";
 import { OrderItem } from "@/db/entities/OrderItem";
 import { Customer } from "@/db/entities/Customer";
 import { Call } from "@/db/entities/Call";
+import { scheduleOrder } from "@/services/planning-engine.service";
+import { classifyOrderSize } from "@/types/planning";
 
 // GET /api/orders?restaurantId=xxx&status=pending
 export async function GET(req: NextRequest) {
@@ -34,17 +36,42 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { items, ...orderData } = body;
 
-  // 1. Créer la commande
-  const order = ds.getRepository(Order).create(orderData);
-  const savedOrder = await ds.getRepository(Order).save(order);
+  // 1. Auto-compute order size and scheduling
+  const itemCount = items?.length || 1;
+  orderData.orderSize = classifyOrderSize(itemCount);
 
-  // 2. Créer les lignes
+  try {
+    const scheduling = await scheduleOrder(
+      orderData.restaurantId,
+      itemCount,
+      orderData.orderType || "pickup",
+      orderData.estimatedReadyAt ? new Date(orderData.estimatedReadyAt) : null,
+      orderData.deliveryDurationMin || 0,
+    );
+    if (scheduling) {
+      orderData.cookStartAt = scheduling.cookStartAt;
+      orderData.handoffAt = scheduling.handoffAt;
+      if (!orderData.estimatedReadyAt) {
+        orderData.estimatedReadyAt = scheduling.estimatedReadyAt;
+      }
+    }
+  } catch (e) {
+    console.warn("[POST /api/orders] scheduling failed, continuing without:", e);
+  }
+
+  const order = ds.getRepository(Order).create(orderData as Partial<Order>) as Order;
+  const savedOrder = await ds.getRepository(Order).save(order) as Order;
+
+  // 2. Créer les lignes de commande (menuItemId déjà résolu par app.py)
   if (items?.length) {
     for (const item of items) {
+      if (item.totalPrice == null) {
+        item.totalPrice = (item.unitPrice || 0) * (item.quantity || 1);
+      }
       const orderItem = ds.getRepository(OrderItem).create({
         ...item,
         orderId: savedOrder.id,
-      });
+      } as Partial<OrderItem>) as OrderItem;
       await ds.getRepository(OrderItem).save(orderItem);
     }
   }
@@ -78,16 +105,26 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(full, { status: 201 });
 }
 
-// PATCH /api/orders — changer le status
+// PATCH /api/orders — mettre à jour status et/ou estimatedReadyAt
 export async function PATCH(req: NextRequest) {
   const ds = await getDb();
-  const { id, status } = await req.json();
+  const { id, status, estimatedReadyAt, cookStartAt, handoffAt } = await req.json();
 
-  if (!id || !status) {
-    return NextResponse.json({ error: "id and status required" }, { status: 400 });
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  await ds.getRepository(Order).update(id, { status });
+  const updates: Record<string, any> = {};
+  if (status) updates.status = status;
+  if (estimatedReadyAt !== undefined) updates.estimatedReadyAt = estimatedReadyAt;
+  if (cookStartAt !== undefined) updates.cookStartAt = cookStartAt;
+  if (handoffAt !== undefined) updates.handoffAt = handoffAt;
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+  }
+
+  await ds.getRepository(Order).update(id, updates);
   const updated = await ds.getRepository(Order).findOne({
     where: { id },
     relations: ["items", "customer"],

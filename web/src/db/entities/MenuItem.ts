@@ -7,32 +7,32 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { MenuCategory } from "./MenuCategory";
+import type { Restaurant } from "./Restaurant";
+import type { MenuCategory } from "./MenuCategory";
 
 @Entity("menu_items")
 export class MenuItem {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "restaurant_id" })
+  @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, (r) => r.menuItems, { onDelete: "CASCADE" })
+  @ManyToOne("Restaurant", "menuItems", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
-  @Column({ name: "category_id", nullable: true })
+  @Column({ name: "category_id", type: "varchar", nullable: true })
   categoryId!: string | null;
 
-  @ManyToOne(() => MenuCategory, (mc) => mc.items, {
+  @ManyToOne("MenuCategory", "items", {
     onDelete: "SET NULL",
     nullable: true,
   })
   @JoinColumn({ name: "category_id" })
   category!: MenuCategory | null;
 
-  @Column({ length: 255 })
+  @Column({ type: "varchar", length: 255 })
   name!: string;
 
   @Column({ type: "text", nullable: true })
@@ -42,9 +42,12 @@ export class MenuItem {
   price!: number;
 
   // Options : tailles, suppléments, etc.
-  // Ex: [{"name":"Taille","choices":[{"label":"Normale","price":0},{"label":"Grande","price":2}]}]
   @Column({ type: "simple-json", default: "[]" })
   options!: any[];
+
+  // Ingrédients / composants du plat
+  @Column({ type: "simple-json", default: "[]" })
+  ingredients!: string[];
 
   // Allergènes stockés en JSON (compatible SQLite + PG)
   @Column({ type: "simple-json", default: "[]" })
@@ -54,7 +57,14 @@ export class MenuItem {
   @Column({ type: "simple-json", default: "[]" })
   tags!: string[];
 
-  @Column({ name: "is_available", default: true })
+  // Plage horaire de disponibilité (HH:MM)
+  @Column({ name: "available_from", type: "varchar", length: 5, nullable: true })
+  availableFrom!: string | null;
+
+  @Column({ name: "available_to", type: "varchar", length: 5, nullable: true })
+  availableTo!: string | null;
+
+  @Column({ name: "is_available", type: "boolean", default: true })
   isAvailable!: boolean;
 
   @Column({ name: "display_order", type: "int", default: 0 })

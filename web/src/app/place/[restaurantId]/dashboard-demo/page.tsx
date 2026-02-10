@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useParams } from "next/navigation";
 import {
   StatCard, PricingCard,
   HourlyChart, DistanceChart, WeeklyChart, OutcomeChart, TimeSavedCard,
@@ -9,7 +10,7 @@ import {
 import type { PricingConfig } from "@/types";
 
 // ============================================================
-// MOCK DATA — remplacer par fetch /api/* en prod
+// MOCK DATA — données de démonstration
 // ============================================================
 
 const hourlyData = Array.from({ length: 24 }, (_, h) => {
@@ -63,12 +64,16 @@ const topCustomers = [
 // PAGE
 // ============================================================
 
-export default function DashboardPage() {
+export default function RestaurantDashboardPage() {
+  const { restaurantId } = useParams<{ restaurantId: string }>();
   const [pricing, setPricing] = useState<PricingConfig>({
     monthlyCost: 49.90,
     perMinute: 0.12,
     currency: "€",
   });
+
+  // TODO: fetch real stats from /api/stats?restaurantId=xxx
+  // For now, using mock data
 
   return (
     <>
@@ -76,12 +81,12 @@ export default function DashboardPage() {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h4 className="fw-bold mb-1">Dashboard</h4>
-          <small className="text-muted">Pizzeria Bella Napoli — Aujourd'hui</small>
+          <small className="text-muted">Aujourd&apos;hui — données de démonstration</small>
         </div>
         <div className="d-flex align-items-center gap-2">
           <span className="live-dot"></span>
           <span className="text-success fw-medium" style={{ fontSize: "0.85rem" }}>
-            2 appels en cours
+            IA Active
           </span>
         </div>
       </div>
@@ -120,12 +125,7 @@ export default function DashboardPage() {
 
       {/* Pricing */}
       <div className="mb-4">
-        <PricingCard
-          pricing={pricing}
-          onPricingChange={setPricing}
-          totalMinutes={1247}
-          totalRevenue={4423}
-        />
+        <PricingCard pricing={pricing} onPricingChange={setPricing} totalMinutes={1247} totalRevenue={4423} />
       </div>
 
       {/* Charts Row 1 */}
@@ -148,7 +148,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Time saved */}
+      {/* Time saved + Top customers */}
       <div className="row g-4 mb-4">
         <div className="col-lg-6">
           <TimeSavedCard avgAi={231} avgHuman={420} totalSavedMin={1022} />

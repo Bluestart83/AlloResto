@@ -38,23 +38,54 @@ Mode B (SIP direct) :
 | `sip-service-requirements.txt` | Dépendances Python (mode SIP direct) |
 | `SIP-BRIDGE.md` | Documentation complète du bridge SIP (API, config, protocole) |
 
+## Setup
+
+```bash
+# Créer le venv et installer les dépendances
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+
+# Pour le mode SIP direct — installer pjsua2 (C extension)
+venv/bin/pip install /chemin/vers/pjsua2-*.whl
+# ou: venv/bin/pip install -r sip-service-requirements.txt
+```
+
+Les scripts `start.sh` et `start-sipbridge.sh` utilisent directement `venv/bin/python` (pas besoin de `source activate`).
+
+### Configuration (.env)
+
+Le `.env` est un symlink vers le `.env` racine du projet. Variables requises :
+
+```bash
+OPENAI_API_KEY=sk-...
+RESTAURANT_ID=uuid-du-restaurant
+
+# Mode SIP (optionnel — si absent, mode Twilio uniquement)
+SIP_USERNAME=0033972360682
+SIP_PASSWORD=secret
+SIP_DOMAIN=sip.ovh.fr
+```
+
+Voir `start-sipbridge.sh` pour toutes les variables SIP/NAT/TURN.
+
 ## Quick Start
 
 ### Mode Twilio
 
 ```bash
-pip install -r requirements.txt
-OPENAI_API_KEY=sk-... RESTAURANT_ID=xxx python app.py
-# Configurer webhook Twilio → https://DOMAINE/incoming-call
+# Configurer .env puis :
+./start.sh
+# → app.py démarre sur :5050
+# → Configurer webhook Twilio → http://DOMAINE:5050/incoming-call
 ```
 
 ### Mode SIP direct
 
 ```bash
-# Tout en un (app.py + sipbridge)
-OPENAI_API_KEY=sk-... SIP_USERNAME=user SIP_PASSWORD=pass RESTAURANT_ID=xxx ./start.sh
+# Tout en un (app.py + sipbridge) — définir SIP_USERNAME dans .env
+./start.sh
 
 # Ou séparément
-python app.py                    # terminal 1 (port 5050)
+venv/bin/python app.py           # terminal 1 (port 5050)
 ./start-sipbridge.sh             # terminal 2 (port 5060)
 ```

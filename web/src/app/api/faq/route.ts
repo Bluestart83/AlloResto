@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     askCount: 1,
     lastCallerPhone: callerPhone || null,
     lastAskedAt: new Date(),
-  });
+  } as Partial<Faq>) as Faq;
 
   const saved = await ds.getRepository(Faq).save(faq);
   return NextResponse.json(saved, { status: 201 });

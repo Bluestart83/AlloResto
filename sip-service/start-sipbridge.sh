@@ -14,6 +14,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# ── Charger .env ─────────────────────────────────────────
+
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
+# ── Python : venv ou système ─────────────────────────────
+
+if [ -x "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python"
+else
+    PYTHON="python"
+fi
+
 # ── Valeurs par défaut (override via env) ──────────────────
 
 SIP_DOMAIN="${SIP_DOMAIN:-sip.twilio.com}"
@@ -40,7 +56,7 @@ MAX_CONCURRENT_CALLS="${MAX_CONCURRENT_CALLS:-10}"
 # ── Construction de la commande ────────────────────────────
 
 CMD=(
-    python "$SCRIPT_DIR/main-sipbridge.py"
+    "$PYTHON" "$SCRIPT_DIR/main-sipbridge.py"
     --sip-domain "$SIP_DOMAIN"
     --sip-username "$SIP_USERNAME"
     --sip-transport "$SIP_TRANSPORT"

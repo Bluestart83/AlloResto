@@ -9,6 +9,12 @@ import { Call } from "./entities/Call";
 import { Order } from "./entities/Order";
 import { OrderItem } from "./entities/OrderItem";
 import { Faq } from "./entities/Faq";
+import { Reservation } from "./entities/Reservation";
+import { DiningRoom } from "./entities/DiningRoom";
+import { DiningTable } from "./entities/DiningTable";
+import { Message } from "./entities/Message";
+import { BlockedPhone } from "./entities/BlockedPhone";
+import { ExternalLoad } from "./entities/ExternalLoad";
 
 const entities = [
   Restaurant,
@@ -20,6 +26,12 @@ const entities = [
   Order,
   OrderItem,
   Faq,
+  Reservation,
+  DiningRoom,
+  DiningTable,
+  Message,
+  BlockedPhone,
+  ExternalLoad,
 ];
 
 // ============================================================

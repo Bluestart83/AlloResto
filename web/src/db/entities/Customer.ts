@@ -9,9 +9,10 @@ import {
   JoinColumn,
   Unique,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { Call } from "./Call";
-import { Order } from "./Order";
+import type { Restaurant } from "./Restaurant";
+import type { Call } from "./Call";
+import type { Order } from "./Order";
+import type { Reservation } from "./Reservation";
 
 @Entity("customers")
 @Unique(["restaurantId", "phone"])
@@ -19,30 +20,30 @@ export class Customer {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "restaurant_id" })
+  @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, (r) => r.customers, { onDelete: "CASCADE" })
+  @ManyToOne("Restaurant", "customers", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
-  @Column({ length: 20 })
+  @Column({ type: "varchar", length: 20 })
   phone!: string;
 
-  @Column({ name: "first_name", length: 100, nullable: true })
+  @Column({ name: "first_name", type: "varchar", length: 100, nullable: true })
   firstName!: string | null;
 
-  @Column({ name: "last_name", length: 100, nullable: true })
+  @Column({ name: "last_name", type: "varchar", length: 100, nullable: true })
   lastName!: string | null;
 
   // --- Adresse de livraison mémorisée ---
   @Column({ name: "delivery_address", type: "text", nullable: true })
   deliveryAddress!: string | null;
 
-  @Column({ name: "delivery_city", length: 100, nullable: true })
+  @Column({ name: "delivery_city", type: "varchar", length: 100, nullable: true })
   deliveryCity!: string | null;
 
-  @Column({ name: "delivery_postal_code", length: 10, nullable: true })
+  @Column({ name: "delivery_postal_code", type: "varchar", length: 10, nullable: true })
   deliveryPostalCode!: string | null;
 
   @Column({ name: "delivery_notes", type: "text", nullable: true })
@@ -89,9 +90,12 @@ export class Customer {
   updatedAt!: Date;
 
   // --- Relations ---
-  @OneToMany(() => Call, (c) => c.customer)
+  @OneToMany("Call", "customer")
   calls!: Call[];
 
-  @OneToMany(() => Order, (o) => o.customer)
+  @OneToMany("Order", "customer")
   orders!: Order[];
+
+  @OneToMany("Reservation", "customer")
+  reservations!: Reservation[];
 }

@@ -5,30 +5,30 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Order } from "./Order";
-import { MenuItem } from "./MenuItem";
+import type { Order } from "./Order";
+import type { MenuItem } from "./MenuItem";
 
 @Entity("order_items")
 export class OrderItem {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "order_id" })
+  @Column({ name: "order_id", type: "varchar" })
   orderId!: string;
 
-  @ManyToOne(() => Order, (o) => o.items, { onDelete: "CASCADE" })
+  @ManyToOne("Order", "items", { onDelete: "CASCADE" })
   @JoinColumn({ name: "order_id" })
   order!: Order;
 
-  @Column({ name: "menu_item_id", nullable: true })
+  @Column({ name: "menu_item_id", type: "varchar", nullable: true })
   menuItemId!: string | null;
 
-  @ManyToOne(() => MenuItem, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne("MenuItem", { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "menu_item_id" })
   menuItem!: MenuItem | null;
 
   // Snapshot du nom (au cas où le menu change)
-  @Column({ length: 255 })
+  @Column({ type: "varchar", length: 255 })
   name!: string;
 
   @Column({ type: "int", default: 1 })

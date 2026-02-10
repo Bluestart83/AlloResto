@@ -7,14 +7,16 @@ import {
   OneToOne,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { PhoneLine } from "./PhoneLine";
-import { Customer } from "./Customer";
-import { Order } from "./Order";
+import type { Restaurant } from "./Restaurant";
+import type { PhoneLine } from "./PhoneLine";
+import type { Customer } from "./Customer";
+import type { Order } from "./Order";
 
 export type CallOutcome =
   | "in_progress"
   | "order_placed"
+  | "reservation_placed"
+  | "message_left"
   | "abandoned"
   | "info_only"
   | "error";
@@ -24,28 +26,28 @@ export class Call {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "restaurant_id" })
+  @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, (r) => r.calls)
+  @ManyToOne("Restaurant", "calls")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
-  @Column({ name: "phone_line_id", nullable: true })
+  @Column({ name: "phone_line_id", type: "varchar", nullable: true })
   phoneLineId!: string | null;
 
-  @ManyToOne(() => PhoneLine, { nullable: true })
+  @ManyToOne("PhoneLine", { nullable: true })
   @JoinColumn({ name: "phone_line_id" })
   phoneLine!: PhoneLine | null;
 
-  @Column({ name: "customer_id", nullable: true })
+  @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne(() => Customer, (c) => c.calls, { nullable: true })
+  @ManyToOne("Customer", "calls", { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 
-  @Column({ name: "caller_number", length: 20 })
+  @Column({ name: "caller_number", type: "varchar", length: 20 })
   callerNumber!: string;
 
   @Column({ name: "started_at", type: "datetime" })
@@ -61,7 +63,7 @@ export class Call {
   @Column({ type: "simple-json", default: "[]" })
   transcript!: any[];
 
-  @Column({ length: 50, default: "in_progress" })
+  @Column({ type: "varchar", length: 50, default: "in_progress" })
   outcome!: CallOutcome;
 
   @Column({
@@ -92,6 +94,6 @@ export class Call {
   createdAt!: Date;
 
   // --- Relations ---
-  @OneToOne(() => Order, (o) => o.call, { nullable: true })
+  @OneToOne("Order", "call", { nullable: true })
   order!: Order | null;
 }

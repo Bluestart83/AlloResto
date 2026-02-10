@@ -122,7 +122,8 @@ export interface MenuOptionChoice {
   price_modifier: number;
 }
 
-export interface MenuOption {
+/** Option classique (taille, sauce, supplément) */
+export interface MenuOptionChoices {
   name: string;
   type: "single_choice" | "multi_choice";
   required: boolean;
@@ -130,12 +131,28 @@ export interface MenuOption {
   choices: MenuOptionChoice[];
 }
 
+/** Option formule — référence une catégorie ou des items spécifiques */
+export interface MenuOptionFormule {
+  name: string;
+  type: "single_choice" | "multi_choice";
+  required: boolean;
+  source: "category" | "items";
+  category_ref?: string;    // ref de la catégorie (import IA)
+  categoryId?: string;      // UUID résolu après persist
+  item_refs?: string[];     // refs d'items (import IA, ex: ["cafe"])
+  itemIds?: string[];       // UUIDs d'items (résolu / CRUD)
+  maxPrice?: number | null; // import IA uniquement — résolu en itemIds par persistImport
+}
+
+export type MenuOption = MenuOptionChoices | MenuOptionFormule;
+
 export interface MenuItemImport {
   ref: string;
   category_ref: string;
   name: string;
   description: string | null;
   price: number;
+  ingredients: string[];
   allergens: string[];
   tags: string[];
   available: boolean;

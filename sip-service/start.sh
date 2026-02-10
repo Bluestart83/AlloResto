@@ -1,42 +1,68 @@
 #!/usr/bin/env bash
 #
-# start.sh — Lance le proxy vocal (app.py) + le SIP bridge (sipbridge)
+# start.sh — Lance le proxy vocal (app.py) + le SIP bridge (si pjsua2 dispo)
 #
 # Les deux process tournent en parallèle. CTRL+C arrête tout.
 #
 # Variables d'environnement requises :
 #   OPENAI_API_KEY    — clé API OpenAI
 #   RESTAURANT_ID     — ID du restaurant
-#   SIP_USERNAME      — username SIP
 #
-# Variables optionnelles : voir start-sipbridge.sh
+# Variables optionnelles (SIP bridge) :
+#   SIP_USERNAME      — username SIP (bridge lancé seulement si défini)
+#   Voir start-sipbridge.sh pour les autres
 #
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# ── Charger .env ─────────────────────────────────────────
+
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
+# ── Python : venv ou système ─────────────────────────────
+
+if [ -x "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python"
+else
+    PYTHON="python"
+fi
+
 # ── Vérifications ──────────────────────────────────────────
 
 : "${OPENAI_API_KEY:?OPENAI_API_KEY requis}"
 : "${RESTAURANT_ID:?RESTAURANT_ID requis}"
-: "${SIP_USERNAME:?SIP_USERNAME requis}"
 
 # ── Config app.py ──────────────────────────────────────────
 
 APP_PORT="${PORT:-5050}"
 NEXT_API_URL="${NEXT_API_URL:-http://localhost:3000}"
 
-# ── Trap : CTRL+C tue les deux process ────────────────────
+# ── Trap : CTRL+C tue tout ───────────────────────────────
+
+PIDS=()
 
 cleanup() {
     echo ""
     echo "Arrêt..."
-    kill $PID_APP $PID_BRIDGE 2>/dev/null || true
-    wait $PID_APP $PID_BRIDGE 2>/dev/null || true
+    # Kill entire process groups (negative PID) to catch child processes
+    for pid in "${PIDS[@]}"; do
+        kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+    done
+    for pid in "${PIDS[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
     echo "Terminé."
 }
 trap cleanup EXIT INT TERM
+
+# Run children in their own process groups so we can kill the whole tree
+set -m
 
 # ── Lancement app.py (proxy vocal OpenAI) ─────────────────
 
@@ -45,18 +71,20 @@ PORT="$APP_PORT" \
 NEXT_API_URL="$NEXT_API_URL" \
 RESTAURANT_ID="$RESTAURANT_ID" \
 OPENAI_API_KEY="$OPENAI_API_KEY" \
-    python "$SCRIPT_DIR/app.py" &
-PID_APP=$!
+    "$PYTHON" "$SCRIPT_DIR/app.py" &
+PIDS+=($!)
 
-# Attendre que app.py soit prêt
-sleep 2
+# ── Lancement SIP bridge (optionnel) ─────────────────────
 
-# ── Lancement SIP bridge ──────────────────────────────────
-
-echo "▶ sipbridge (SIP: $SIP_USERNAME)"
-"$SCRIPT_DIR/start-sipbridge.sh" &
-PID_BRIDGE=$!
+if [ -n "${SIP_USERNAME:-}" ]; then
+    sleep 2
+    echo "▶ sipbridge (SIP: $SIP_USERNAME)"
+    "$SCRIPT_DIR/start-sipbridge.sh" &
+    PIDS+=($!)
+else
+    echo "ℹ SIP_USERNAME non défini — mode Twilio uniquement"
+fi
 
 # ── Attendre ───────────────────────────────────────────────
 
-wait $PID_APP $PID_BRIDGE
+wait "${PIDS[@]}"

@@ -202,6 +202,43 @@ async def handle_confirm_order(args: dict, ctx: dict) -> dict:
         estimated_ready_at = ready_paris.astimezone(timezone.utc).isoformat()
         heure_str = ready_paris.strftime("%H:%M")
 
+    # Résoudre les id entiers → UUID via le itemMap
+    item_map = ctx.get("item_map", {})
+    resolved_items = []
+    for item in args.get("items", []):
+        item_idx = str(item.get("id", ""))
+        entry = item_map.get(item_idx, {})
+        menu_item_id = entry.get("id") if entry else None
+        item_name = entry.get("name", f"Item #{item_idx}") if entry else f"Item #{item_idx}"
+
+        # Résoudre choice_id dans selected_options
+        resolved_options = []
+        for opt in (item.get("selected_options") or []):
+            choice_id = opt.get("choice_id")
+            if choice_id is not None:
+                choice_entry = item_map.get(str(choice_id), {})
+                resolved_options.append({
+                    "name": opt.get("name", ""),
+                    "choice": choice_entry.get("name", f"#{choice_id}") if choice_entry else f"#{choice_id}",
+                    "extra_price": opt.get("extra_price", 0),
+                })
+            else:
+                resolved_options.append({
+                    "name": opt.get("name", ""),
+                    "choice": opt.get("choice", ""),
+                    "extra_price": opt.get("extra_price", 0),
+                })
+
+        resolved_items.append({
+            "menuItemId": menu_item_id,
+            "name": item_name,
+            "quantity": item.get("quantity", 1),
+            "unitPrice": item.get("unit_price", 0),
+            "totalPrice": item.get("unit_price", 0) * item.get("quantity", 1),
+            "selectedOptions": resolved_options,
+            "notes": item.get("notes"),
+        })
+
     order_data = {
         "restaurantId": ctx["restaurant_id"],
         "callId": ctx.get("call_id"),
@@ -217,16 +254,7 @@ async def handle_confirm_order(args: dict, ctx: dict) -> dict:
         "estimatedReadyAt": estimated_ready_at,
         "notes": args.get("notes", ""),
         "paymentMethod": args.get("payment_method", "cash"),
-        "items": [
-            {
-                "itemName": item["name"],
-                "quantity": item.get("quantity", 1),
-                "price": item.get("unit_price", 0),
-                "options": item.get("selected_options"),
-                "notes": item.get("notes"),
-            }
-            for item in args.get("items", [])
-        ],
+        "items": resolved_items,
     }
 
     try:
@@ -470,10 +498,13 @@ async def handle_function_call(response: dict, openai_ws, ctx: dict):
         # Marquer si une commande ou réservation a été passée
         if function_name == "confirm_order" and result.get("success"):
             ctx["order_placed"] = True
+            ctx["should_hangup"] = True
         elif function_name == "confirm_reservation" and result.get("success"):
             ctx["reservation_placed"] = True
+            ctx["should_hangup"] = True
         elif function_name == "leave_message" and result.get("success"):
             ctx["message_left"] = True
+            ctx["should_hangup"] = True
     else:
         result = {"error": f"Fonction inconnue: {function_name}"}
 
@@ -522,6 +553,8 @@ async def media_stream(websocket: WebSocket):
         "delivery_enabled": False,
         # Résultat du dernier check_availability (enrichi par le handler)
         "last_availability_check": None,
+        # Auto-hangup : raccrocher après le prochain au revoir de l'IA
+        "should_hangup": False,
     }
 
     ai_config = None
@@ -538,7 +571,7 @@ async def media_stream(websocket: WebSocket):
         "OpenAI-Beta": "realtime=v1",
     }
 
-    async with websockets.connect(openai_ws_url, additional_headers=headers) as openai_ws:
+    async with websockets.connect(openai_ws_url, extra_headers=headers) as openai_ws:
 
         async def send_session_update():
             """Configure la session OpenAI avec les données chargées de la BDD."""
@@ -628,6 +661,8 @@ async def media_stream(websocket: WebSocket):
 
                             ctx["avg_prep_time_min"] = ai_config.get("avgPrepTimeMin", 30)
                             ctx["delivery_enabled"] = ai_config.get("deliveryEnabled", False)
+                            # itemMap: {index_int: {id: UUID, name: str}}
+                            ctx["item_map"] = ai_config.get("itemMap", {})
 
                             customer = ai_config.get("customerContext")
                             if customer:
@@ -750,6 +785,15 @@ async def media_stream(websocket: WebSocket):
                         })
                         mark_queue.append("responsePart")
 
+                        # Auto-hangup après au revoir (post commande/réservation/message)
+                        if ctx.get("should_hangup"):
+                            logger.info("Auto-hangup: commande/réservation confirmée, fin de l'appel")
+                            await asyncio.sleep(1.5)  # laisser l'audio finir
+                            await finalize_call(ctx)
+                            await websocket.send_json({"event": "stop", "streamSid": stream_sid})
+                            await websocket.close()
+                            return
+
             except Exception as e:
                 logger.error(f"Erreur OpenAI: {e}")
 
@@ -770,6 +814,6 @@ if __name__ == "__main__":
     logger.info(f"Serveur vocal AlloResto demarre sur le port {PORT}")
     logger.info(f"API Next.js: {NEXT_API_URL}")
     logger.info(f"Restaurant: {RESTAURANT_ID}")
-    logger.info(f"Webhook Twilio: https://VOTRE_DOMAINE/incoming-call")
+    logger.info(f"Webhook Twilio: http://0.0.0.0:{PORT}/incoming-call")
 
     uvicorn.run(app, host="0.0.0.0", port=PORT)

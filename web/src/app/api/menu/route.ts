@@ -31,12 +31,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
 
   if (body.type === "category") {
-    const cat = ds.getRepository(MenuCategory).create(body.data);
+    const cat = ds.getRepository(MenuCategory).create(body.data as Partial<MenuCategory>) as MenuCategory;
     const saved = await ds.getRepository(MenuCategory).save(cat);
     return NextResponse.json(saved, { status: 201 });
   }
 
-  const item = ds.getRepository(MenuItem).create(body.data || body);
+  const item = ds.getRepository(MenuItem).create((body.data || body) as Partial<MenuItem>) as MenuItem;
   const saved = await ds.getRepository(MenuItem).save(item);
   return NextResponse.json(saved, { status: 201 });
 }

@@ -13,7 +13,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   searchGooglePlace,
+  autocompletePlaces,
+  findPlaceFromGoogleMapsUrl,
   importFromGooglePlaces,
+  fetchMenuPhotos,
   extractMenuFromPhotos,
   extractMenuFromWebsite,
   importRestaurant,
@@ -37,6 +40,23 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ results });
       }
 
+      // Autocomplete Google Places
+      case "autocomplete-place": {
+        const { input } = await req.json();
+        const predictions = await autocompletePlaces(input);
+        return NextResponse.json({ predictions });
+      }
+
+      // Import depuis URL Google Maps
+      case "from-url": {
+        const { url: mapsUrl } = await req.json();
+        const placeId = await findPlaceFromGoogleMapsUrl(mapsUrl);
+        if (!placeId) {
+          return NextResponse.json({ error: "Impossible de trouver le restaurant depuis cette URL" }, { status: 404 });
+        }
+        return NextResponse.json({ placeId });
+      }
+
       // Étape 2 : Importer infos depuis Google Places
       case "from-place": {
         const { placeId } = await req.json();
@@ -44,20 +64,36 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result);
       }
 
-      // Étape 3a : Scanner des photos de menu
-      case "scan-menu": {
-        const formData = await req.formData();
-        const files = formData.getAll("photos") as File[];
+      // Étape 3 : Récupérer les photos menu via SerpApi
+      case "fetch-menu-photos": {
+        const { name, address } = await req.json();
+        const result = await fetchMenuPhotos(name, address);
+        return NextResponse.json(result);
+      }
 
-        const images = await Promise.all(
-          files.map(async (file) => {
-            const buffer = Buffer.from(await file.arrayBuffer());
-            return {
-              base64: buffer.toString("base64"),
-              mimeType: file.type || "image/jpeg",
-            };
-          })
-        );
+      // Étape 3a : Scanner des photos de menu (fichiers ou URLs)
+      case "scan-menu": {
+        const contentType = req.headers.get("content-type") || "";
+        let images: { url?: string; base64?: string; mimeType?: string }[];
+
+        if (contentType.includes("application/json")) {
+          // URLs Google Places
+          const { urls } = await req.json();
+          images = (urls as string[]).map((url: string) => ({ url }));
+        } else {
+          // Upload fichiers
+          const formData = await req.formData();
+          const files = formData.getAll("photos") as File[];
+          images = await Promise.all(
+            files.map(async (file) => {
+              const buffer = Buffer.from(await file.arrayBuffer());
+              return {
+                base64: buffer.toString("base64"),
+                mimeType: file.type || "image/jpeg",
+              };
+            })
+          );
+        }
 
         const menu = await extractMenuFromPhotos(images);
         return NextResponse.json(menu);

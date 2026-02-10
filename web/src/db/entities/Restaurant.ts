@@ -7,41 +7,46 @@ import {
   OneToMany,
   OneToOne,
 } from "typeorm";
-import { PhoneLine } from "./PhoneLine";
-import { Customer } from "./Customer";
-import { MenuCategory } from "./MenuCategory";
-import { MenuItem } from "./MenuItem";
-import { Call } from "./Call";
-import { Order } from "./Order";
-import { Faq } from "./Faq";
+import type { PhoneLine } from "./PhoneLine";
+import type { Customer } from "./Customer";
+import type { MenuCategory } from "./MenuCategory";
+import type { MenuItem } from "./MenuItem";
+import type { Call } from "./Call";
+import type { Order } from "./Order";
+import type { Faq } from "./Faq";
+import type { Reservation } from "./Reservation";
+import type { DiningRoom } from "./DiningRoom";
+import type { DiningTable } from "./DiningTable";
+import type { Message } from "./Message";
+import type { ExternalLoad } from "./ExternalLoad";
 
 @Entity("restaurants")
 export class Restaurant {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ length: 255 })
+  @Column({ type: "varchar", length: 255 })
   name!: string;
 
-  @Column({ name: "cuisine_type", length: 50, default: "other" })
+  @Column({ name: "cuisine_type", type: "varchar", length: 50, default: "other" })
   cuisineType!: string;
 
   @Column({ type: "text", nullable: true })
   address!: string | null;
 
-  @Column({ length: 100, nullable: true })
+  @Column({ type: "varchar", length: 100, nullable: true })
   city!: string | null;
 
-  @Column({ name: "postal_code", length: 10, nullable: true })
+  @Column({ name: "postal_code", type: "varchar", length: 10, nullable: true })
   postalCode!: string | null;
 
-  @Column({ length: 20, nullable: true })
+  @Column({ type: "varchar", length: 20, nullable: true })
   phone!: string | null;
 
-  @Column({ name: "contact_name", length: 255, nullable: true })
+  @Column({ name: "contact_name", type: "varchar", length: 255, nullable: true })
   contactName!: string | null;
 
-  @Column({ name: "contact_email", length: 255, nullable: true })
+  @Column({ name: "contact_email", type: "varchar", length: 255, nullable: true })
   contactEmail!: string | null;
 
   // --- Coordonnées GPS (géocodées au setup) ---
@@ -59,14 +64,14 @@ export class Restaurant {
   })
   welcomeMessage!: string;
 
-  @Column({ name: "ai_voice", length: 50, default: "sage" })
+  @Column({ name: "ai_voice", type: "varchar", length: 50, default: "sage" })
   aiVoice!: string;
 
   @Column({ name: "ai_instructions", type: "text", nullable: true })
   aiInstructions!: string | null;
 
   // --- Config livraison ---
-  @Column({ name: "delivery_enabled", default: false })
+  @Column({ name: "delivery_enabled", type: "boolean", default: false })
   deliveryEnabled!: boolean;
 
   @Column({
@@ -108,11 +113,54 @@ export class Restaurant {
   @Column({ name: "avg_prep_time_min", type: "int", default: 30 })
   avgPrepTimeMin!: number;
 
+  // --- Config réservation ---
+  @Column({ name: "reservation_enabled", type: "boolean", default: false })
+  reservationEnabled!: boolean;
+
+  @Column({ name: "total_seats", type: "int", default: 0 })
+  totalSeats!: number;
+
+  @Column({ name: "avg_meal_duration_min", type: "int", default: 90 })
+  avgMealDurationMin!: number;
+
+  @Column({ name: "min_reservation_advance_min", type: "int", default: 30 })
+  minReservationAdvanceMin!: number;
+
+  @Column({ name: "max_reservation_advance_days", type: "int", default: 30 })
+  maxReservationAdvanceDays!: number;
+
   // JSONB sur Postgres, TEXT (JSON stringifié) sur SQLite
   @Column({ name: "opening_hours", type: "simple-json", default: "{}" })
   openingHours!: Record<string, any>;
 
-  @Column({ name: "is_active", default: true })
+  @Column({ name: "opening_hours_text", type: "simple-json", default: "[]" })
+  openingHoursText!: string[];
+
+  // --- Web & photos ---
+  @Column({ type: "text", nullable: true })
+  website!: string | null;
+
+  @Column({ name: "menu_url", type: "text", nullable: true })
+  menuUrl!: string | null;
+
+  @Column({ name: "cover_image", type: "text", nullable: true })
+  coverImage!: string | null;
+
+  @Column({ name: "gallery", type: "simple-json", default: "[]" })
+  gallery!: string[];
+
+  // --- Données brutes API (debug / ré-import) ---
+  @Column({ name: "google_place_raw", type: "simple-json", nullable: true })
+  googlePlaceRaw!: Record<string, any> | null;
+
+  @Column({ name: "serpapi_photos_raw", type: "simple-json", nullable: true })
+  serpApiPhotosRaw!: Record<string, any> | null;
+
+  // --- Config planning ---
+  @Column({ name: "planning_config", type: "simple-json", default: "{}" })
+  planningConfig!: Record<string, any>;
+
+  @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;
 
   @CreateDateColumn({ name: "created_at" })
@@ -121,25 +169,40 @@ export class Restaurant {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt!: Date;
 
-  // --- Relations ---
-  @OneToOne(() => PhoneLine, (pl) => pl.restaurant)
+  // --- Relations (string refs to avoid circular deps with Turbopack) ---
+  @OneToOne("PhoneLine", "restaurant")
   phoneLine!: PhoneLine;
 
-  @OneToMany(() => Customer, (c) => c.restaurant)
+  @OneToMany("Customer", "restaurant")
   customers!: Customer[];
 
-  @OneToMany(() => MenuCategory, (mc) => mc.restaurant)
+  @OneToMany("MenuCategory", "restaurant")
   menuCategories!: MenuCategory[];
 
-  @OneToMany(() => MenuItem, (mi) => mi.restaurant)
+  @OneToMany("MenuItem", "restaurant")
   menuItems!: MenuItem[];
 
-  @OneToMany(() => Call, (c) => c.restaurant)
+  @OneToMany("Call", "restaurant")
   calls!: Call[];
 
-  @OneToMany(() => Order, (o) => o.restaurant)
+  @OneToMany("Order", "restaurant")
   orders!: Order[];
 
-  @OneToMany(() => Faq, (f) => f.restaurant)
+  @OneToMany("Faq", "restaurant")
   faqs!: Faq[];
+
+  @OneToMany("Reservation", "restaurant")
+  reservations!: Reservation[];
+
+  @OneToMany("DiningRoom", "restaurant")
+  diningRooms!: DiningRoom[];
+
+  @OneToMany("DiningTable", "restaurant")
+  diningTables!: DiningTable[];
+
+  @OneToMany("Message", "restaurant")
+  messages!: Message[];
+
+  @OneToMany("ExternalLoad", "restaurant")
+  externalLoads!: ExternalLoad[];
 }

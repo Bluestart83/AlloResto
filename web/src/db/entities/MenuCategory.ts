@@ -6,31 +6,31 @@ import {
   OneToMany,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { MenuItem } from "./MenuItem";
+import type { Restaurant } from "./Restaurant";
+import type { MenuItem } from "./MenuItem";
 
 @Entity("menu_categories")
 export class MenuCategory {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "restaurant_id" })
+  @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, (r) => r.menuCategories, { onDelete: "CASCADE" })
+  @ManyToOne("Restaurant", "menuCategories", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
-  @Column({ length: 100 })
+  @Column({ type: "varchar", length: 100 })
   name!: string;
 
   @Column({ name: "display_order", type: "int", default: 0 })
   displayOrder!: number;
 
-  @Column({ name: "is_active", default: true })
+  @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;
 
   // --- Relations ---
-  @OneToMany(() => MenuItem, (mi) => mi.category)
+  @OneToMany("MenuItem", "category")
   items!: MenuItem[];
 }

@@ -522,6 +522,23 @@ print(f'{len(active)} appels actifs')
 
 ## 10. Dépannage
 
+### pjsua2 non disponible
+
+pjsua2 est une C extension compilée pour une version **spécifique** de Python. Le wheel `cp312` ne marche pas avec Python 3.13.
+
+```bash
+# Vérifier la version du venv
+venv/bin/python --version
+
+# Installer le bon wheel (doit matcher cpXYZ)
+venv/bin/pip install /chemin/vers/pjsua2-2.14.0-cp312-cp312-macosx_26_0_arm64.whl
+
+# Tester
+venv/bin/python -c "import pjsua2 as pj; print('OK')"
+```
+
+Si la version ne matche pas : recréer le venv avec la bonne version de Python, ou recompiler pjsua2.
+
 ### PJSIP ne s'enregistre pas
 
 ```bash
@@ -530,7 +547,7 @@ curl http://localhost:5060/health
 # → sip_registered: false
 
 # Vérifier le DNS
-nslookup sip.twilio.com
+nslookup sip.ovh.fr
 
 # Vérifier le port
 netstat -ulnp | grep 5060

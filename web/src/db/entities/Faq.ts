@@ -8,7 +8,7 @@ import {
   JoinColumn,
   Index,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
+import type { Restaurant } from "./Restaurant";
 
 /**
  * FAQ — Base de connaissances par restaurant
@@ -33,10 +33,10 @@ export class Faq {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "restaurant_id" })
+  @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, (r) => r.faqs, { onDelete: "CASCADE" })
+  @ManyToOne("Restaurant", "faqs", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -53,6 +53,7 @@ export class Faq {
   // ---- Métadonnées ----
 
   @Column({
+    type: "varchar",
     length: 30,
     default: "other",
     comment: "horaires | livraison | allergens | paiement | parking | reservation | promotion | ingredients | other",
@@ -60,6 +61,7 @@ export class Faq {
   category!: string;
 
   @Column({
+    type: "varchar",
     length: 20,
     default: "pending",
     comment: "pending | answered | ignored",
@@ -70,7 +72,7 @@ export class Faq {
   @Column({ name: "ask_count", type: "int", default: 1 })
   askCount!: number;
 
-  @Column({ name: "last_caller_phone", length: 20, nullable: true })
+  @Column({ name: "last_caller_phone", type: "varchar", length: 20, nullable: true })
   lastCallerPhone!: string | null;
 
   @Column({ name: "last_asked_at", type: "datetime", nullable: true })

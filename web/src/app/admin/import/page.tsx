@@ -1,8 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import PlacesAutocomplete from "@/components/PlacesAutocomplete";
 
 type Step = "search" | "review_info" | "menu_source" | "review_menu" | "confirm";
+
+const CUISINE_TYPES: { value: string; label: string }[] = [
+  { value: "pizza", label: "Pizza" },
+  { value: "kebab", label: "Kebab" },
+  { value: "burger", label: "Burger" },
+  { value: "sushi", label: "Sushi" },
+  { value: "italien", label: "Italien" },
+  { value: "chinois", label: "Chinois" },
+  { value: "indien", label: "Indien" },
+  { value: "mexicain", label: "Mexicain" },
+  { value: "libanais", label: "Libanais" },
+  { value: "thai", label: "Tha\u00ef" },
+  { value: "japonais", label: "Japonais" },
+  { value: "coreen", label: "Cor\u00e9en" },
+  { value: "vietnamien", label: "Vietnamien" },
+  { value: "turc", label: "Turc" },
+  { value: "grec", label: "Grec" },
+  { value: "francais", label: "Fran\u00e7ais" },
+  { value: "fast_food", label: "Fast Food" },
+  { value: "other", label: "Autre" },
+];
 
 const steps: { key: Step; label: string; icon: string }[] = [
   { key: "search", label: "Recherche", icon: "bi-search" },
@@ -16,30 +38,36 @@ export default function ImportPage() {
   const [step, setStep] = useState<Step>("search");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchCity, setSearchCity] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [importData, setImportData] = useState<any>(null);
   const [menuData, setMenuData] = useState<any>(null);
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [menuPhotos, setMenuPhotos] = useState<string[]>([]);
+  const [loadingMenuPhotos, setLoadingMenuPhotos] = useState(false);
 
   const currentIndex = steps.findIndex((s) => s.key === step);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+  const handleImportFromUrl = async () => {
+    if (!mapsUrl.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch("/api/import?action=search-place", {
+      const resp = await fetch("/api/import?action=from-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery, city: searchCity }),
+        body: JSON.stringify({ url: mapsUrl }),
       });
       const data = await resp.json();
-      setSearchResults(data.results || []);
+      if (data.error) {
+        setError(data.error);
+        setLoading(false);
+        return;
+      }
+      await handleSelectPlace(data.placeId);
     } catch {
-      setError("Erreur lors de la recherche");
+      setError("Erreur lors de l'import depuis l'URL");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSelectPlace = async (placeId: string) => {
@@ -56,6 +84,68 @@ export default function ImportPage() {
       setError("Erreur lors de l'import");
     }
     setLoading(false);
+  };
+
+  const handleScanGooglePhotos = async (urls: string[]) => {
+    if (urls.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/import?action=scan-menu", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls }),
+      });
+      setMenuData(await resp.json());
+      setStep("review_menu");
+    } catch {
+      setError("Erreur lors du scan des photos");
+    }
+    setLoading(false);
+  };
+
+  const togglePhoto = (url: string) => {
+    setSelectedPhotos((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url); else next.add(url);
+      return next;
+    });
+  };
+
+  const allPhotos: string[] = importData?.restaurant?.images
+    ? [importData.restaurant.images.cover, ...importData.restaurant.images.gallery].filter(Boolean)
+    : [];
+
+  const goToMenuStep = async () => {
+    setStep("menu_source");
+    // Fetch menu photos via SerpApi when entering step 3
+    if (importData?.restaurant?.name && menuPhotos.length === 0) {
+      setLoadingMenuPhotos(true);
+      try {
+        const resp = await fetch("/api/import?action=fetch-menu-photos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: importData.restaurant.name,
+            address: importData.restaurant.address || "",
+          }),
+        });
+        const data = await resp.json();
+        if (data.photos?.length > 0) {
+          setMenuPhotos(data.photos);
+          // Store SerpApi raw data in import metadata for persistence
+          if (data.serpapi_raw) {
+            setImportData((prev: any) => ({
+              ...prev,
+              _import_metadata: { ...prev?._import_metadata, serpapi_photos_raw: data.serpapi_raw },
+            }));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch menu photos:", e);
+      }
+      setLoadingMenuPhotos(false);
+    }
   };
 
   const handleMenuPhotos = async (files: FileList) => {
@@ -136,45 +226,31 @@ export default function ImportPage() {
         <div className="card border">
           <div className="card-body">
             <h5 className="fw-bold mb-3">Rechercher sur Google Places</h5>
-            <div className="row g-3 mb-3">
-              <div className="col-md-8">
-                <label className="form-label">Nom du restaurant</label>
-                <input className="form-control" value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="Pizzeria Bella Napoli" />
-              </div>
-              <div className="col-md-4">
-                <label className="form-label">Ville</label>
-                <input className="form-control" value={searchCity}
-                  onChange={(e) => setSearchCity(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="Marseille" />
-              </div>
-            </div>
-            <button className="btn btn-primary" onClick={handleSearch} disabled={loading}>
-              {loading ? <span className="spinner-border spinner-border-sm me-1"></span> : <i className="bi bi-search me-1"></i>}
-              Rechercher
-            </button>
+            <PlacesAutocomplete onSelect={handleSelectPlace} disabled={loading} />
 
-            {searchResults.length > 0 && (
-              <div className="mt-4">
-                <small className="text-muted">{searchResults.length} résultat(s)</small>
-                <div className="list-group mt-2">
-                  {searchResults.map((r: any) => (
-                    <button key={r.place_id} className="list-group-item list-group-item-action d-flex align-items-center"
-                      onClick={() => handleSelectPlace(r.place_id)}>
-                      <i className="bi bi-geo-alt text-primary me-3"></i>
-                      <div>
-                        <div className="fw-medium">{r.name}</div>
-                        <small className="text-muted">{r.address}</small>
-                      </div>
-                      <i className="bi bi-chevron-right ms-auto text-muted"></i>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="d-flex align-items-center my-4">
+              <hr className="flex-grow-1" />
+              <span className="mx-3 text-muted fw-medium">ou</span>
+              <hr className="flex-grow-1" />
+            </div>
+
+            <label className="form-label text-muted">
+              <i className="bi bi-link-45deg me-1"></i>Coller un lien Google Maps
+            </label>
+            <div className="input-group">
+              <input
+                type="url"
+                className="form-control"
+                placeholder="https://www.google.com/maps/place/..."
+                value={mapsUrl}
+                onChange={(e) => setMapsUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleImportFromUrl()}
+                disabled={loading}
+              />
+              <button className="btn btn-primary" onClick={handleImportFromUrl} disabled={loading || !mapsUrl.trim()}>
+                {loading ? <span className="spinner-border spinner-border-sm"></span> : <i className="bi bi-arrow-right"></i>}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -195,12 +271,81 @@ export default function ImportPage() {
                     })} />
                 </div>
               ))}
+              <div className="col-md-6">
+                <label className="form-label">Type de cuisine</label>
+                <select className="form-select"
+                  value={importData.restaurant.cuisine_type || "other"}
+                  onChange={(e) => setImportData({
+                    ...importData,
+                    restaurant: { ...importData.restaurant, cuisine_type: e.target.value },
+                  })}>
+                  {CUISINE_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            {/* Horaires d'ouverture */}
+            {importData.restaurant.opening_hours_text?.length > 0 && (
+              <div className="mt-4">
+                <h6 className="fw-semibold mb-2">
+                  <i className="bi bi-clock me-1"></i>Horaires d&apos;ouverture
+                </h6>
+                <div className="row g-1">
+                  {importData.restaurant.opening_hours_text.map((line: string, i: number) => (
+                    <div key={i} className="col-md-6">
+                      <small className="text-muted">{line}</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Photos Google Places */}
+            {allPhotos.length > 0 && (
+              <div className="mt-4">
+                <h6 className="fw-semibold mb-2">
+                  <i className="bi bi-images me-1"></i>Photos Google Places
+                  <small className="text-muted fw-normal ms-2">{allPhotos.length} photo(s)</small>
+                </h6>
+                <div className="d-flex flex-wrap gap-2">
+                  {allPhotos.map((url: string, i: number) => (
+                    <div
+                      key={i}
+                      className={`position-relative border rounded overflow-hidden ${selectedPhotos.has(url) ? "border-primary border-2" : ""}`}
+                      style={{ width: 120, height: 90, cursor: "pointer" }}
+                      onClick={() => togglePhoto(url)}
+                    >
+                      <img src={url} alt={`Photo ${i + 1}`}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      {selectedPhotos.has(url) && (
+                        <div className="position-absolute top-0 end-0 m-1">
+                          <span className="badge bg-primary rounded-circle"><i className="bi bi-check"></i></span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
+            {/* Bouton scan commun */}
+            {selectedPhotos.size > 0 && (
+              <button className="btn btn-sm btn-outline-primary mt-3"
+                onClick={() => handleScanGooglePhotos(Array.from(selectedPhotos))}
+                disabled={loading}>
+                {loading ? <span className="spinner-border spinner-border-sm me-1"></span> : <i className="bi bi-cpu me-1"></i>}
+                Scanner {selectedPhotos.size} photo(s) avec l&apos;IA
+              </button>
+            )}
+
             <div className="d-flex justify-content-between mt-4">
               <button className="btn btn-outline-secondary" onClick={() => setStep("search")}>
                 <i className="bi bi-chevron-left me-1"></i>Retour
               </button>
-              <button className="btn btn-primary" onClick={() => setStep("menu_source")}>
+              <button className="btn btn-primary" onClick={goToMenuStep}>
                 Importer le menu<i className="bi bi-chevron-right ms-1"></i>
               </button>
             </div>
@@ -213,6 +358,80 @@ export default function ImportPage() {
         <div className="card border">
           <div className="card-body">
             <h5 className="fw-bold mb-4">Comment importer le menu ?</h5>
+
+            {/* Google Places photos + Menu photos */}
+            {(allPhotos.length > 0 || menuPhotos.length > 0 || loadingMenuPhotos) && (
+              <div className="card border mb-4">
+                <div className="card-body">
+                  {allPhotos.length > 0 && (
+                    <>
+                      <h6 className="fw-semibold mb-3">
+                        <i className="bi bi-google me-1 text-primary"></i>Photos Google Places
+                      </h6>
+                      <div className="d-flex flex-wrap gap-2 mb-3">
+                        {allPhotos.map((url: string, i: number) => (
+                          <div
+                            key={i}
+                            className={`position-relative border rounded overflow-hidden ${selectedPhotos.has(url) ? "border-primary border-2 shadow-sm" : ""}`}
+                            style={{ width: 110, height: 85, cursor: "pointer" }}
+                            onClick={() => togglePhoto(url)}
+                          >
+                            <img src={url} alt={`Photo ${i + 1}`}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            <div className={`position-absolute top-0 end-0 m-1 ${selectedPhotos.has(url) ? "" : "d-none"}`}>
+                              <span className="badge bg-primary rounded-circle"><i className="bi bi-check"></i></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {loadingMenuPhotos && (
+                    <div className="d-flex align-items-center gap-2 mb-3 text-success">
+                      <span className="spinner-border spinner-border-sm"></span>
+                      <span>Recherche des photos de menu...</span>
+                    </div>
+                  )}
+
+                  {menuPhotos.length > 0 && (
+                    <>
+                      <h6 className="fw-semibold mb-3">
+                        <i className="bi bi-card-list me-1 text-success"></i>Photos du menu
+                        <small className="text-muted fw-normal ms-2">{menuPhotos.length} photo(s)</small>
+                        <span className="badge bg-success-subtle text-success ms-2" style={{ fontSize: "0.7rem" }}>SerpApi</span>
+                      </h6>
+                      <div className="d-flex flex-wrap gap-2 mb-3">
+                        {menuPhotos.map((url: string, i: number) => (
+                          <div
+                            key={`menu-${i}`}
+                            className={`position-relative border rounded overflow-hidden ${selectedPhotos.has(url) ? "border-success border-2 shadow-sm" : "border-success-subtle"}`}
+                            style={{ width: 110, height: 85, cursor: "pointer" }}
+                            onClick={() => togglePhoto(url)}
+                          >
+                            <img src={url} alt={`Menu ${i + 1}`}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            <div className={`position-absolute top-0 end-0 m-1 ${selectedPhotos.has(url) ? "" : "d-none"}`}>
+                              <span className="badge bg-success rounded-circle"><i className="bi bi-check"></i></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={loading || selectedPhotos.size === 0}
+                    onClick={() => handleScanGooglePhotos(Array.from(selectedPhotos))}
+                  >
+                    {loading ? <span className="spinner-border spinner-border-sm me-1"></span> : <i className="bi bi-cpu me-1"></i>}
+                    Scanner {selectedPhotos.size || ""} photo(s) sélectionnée(s)
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="row g-4">
               {/* Photo scan */}
               <div className="col-md-4">
@@ -346,7 +565,7 @@ export default function ImportPage() {
               {importData?.restaurant?.name} est prêt à recevoir des commandes vocales.
             </p>
             <div className="d-flex gap-2 justify-content-center">
-              <a href="/dashboard" className="btn btn-primary">Voir le dashboard</a>
+              <a href="/admin/customers" className="btn btn-primary">Voir les restaurants</a>
               <button className="btn btn-outline-secondary"
                 onClick={() => { setStep("search"); setImportData(null); setMenuData(null); }}>
                 Ajouter un autre

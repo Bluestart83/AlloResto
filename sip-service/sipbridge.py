@@ -28,7 +28,9 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, Callable, Any
+from typing import Optional, Any
+import queue
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
@@ -345,6 +347,7 @@ class SipBridge:
             self._endpoint.transportCreate(pj.PJSIP_TRANSPORT_UDP, tp_cfg)
 
         self._endpoint.libStart()
+        logger.info("PJSIP endpoint started")
 
         for codec, priority in cfg.audio.codec_priority:
             try:
@@ -382,7 +385,8 @@ class SipBridge:
 
         self._account = _SipAccountHandler(self)
         self._account.create(acc_cfg)
-        logger.info(f"SIP enregistré: {cfg.sip.username}@{cfg.sip.domain}")
+        logger.info(f"SIP account created: {cfg.sip.username}@{cfg.sip.domain}")
+        logger.info(f"SIP registering to {cfg.sip.domain}...")
 
     def pjsip_shutdown(self):
         if self._endpoint:
@@ -585,16 +589,25 @@ class SipBridge:
         except asyncio.CancelledError:
             pass
         finally:
-            for sid, record in list(self.active_calls.items()):
-                call_ref = record._call_ref
-                if call_ref:
-                    try:
-                        prm = pj.CallOpParam()
-                        call_ref.hangup(prm)
-                    except Exception:
-                        pass
-            self.active_calls.clear()
-            await self.loop.run_in_executor(self._executor, self.pjsip_shutdown)
+            def _cleanup_pjsip():
+                """Cleanup pjlib calls from a registered thread."""
+                try:
+                    if self._endpoint:
+                        self._endpoint.libRegisterThread("cleanup")
+                except Exception:
+                    pass
+                for sid, record in list(self.active_calls.items()):
+                    call_ref = record._call_ref
+                    if call_ref:
+                        try:
+                            prm = pj.CallOpParam()
+                            call_ref.hangup(prm)
+                        except Exception:
+                            pass
+                self.active_calls.clear()
+                self.pjsip_shutdown()
+
+            await self.loop.run_in_executor(self._executor, _cleanup_pjsip)
             self._executor.shutdown(wait=False)
             logger.info("Bye.")
 
@@ -695,32 +708,22 @@ class _WsSession:
             self._alive = False
 
     async def _sip_to_ws(self, ws):
-        queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=200)
-        loop = asyncio.get_event_loop()
-
-        def on_frame(pcm: bytes):
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, pcm)
-            except asyncio.QueueFull:
-                pass
-
-        self.audio_port.set_capture_callback(on_frame)
         ts_ms = 0
+        poll_interval = self.audio_cfg.frame_ms / 1000.0  # 20ms
 
         try:
             while self._alive:
-                try:
-                    pcm = await asyncio.wait_for(queue.get(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    continue
-
-                ulaw = pcm16_to_ulaw(pcm)
-                payload = base64.b64encode(ulaw).decode("ascii")
-                await ws.send(json.dumps({
-                    "event": "media",
-                    "media": {"payload": payload, "timestamp": ts_ms},
-                }))
-                ts_ms += self.audio_cfg.frame_ms
+                pcm = self.audio_port.get_frames()
+                if pcm and len(pcm) > 0:
+                    ulaw = pcm16_to_ulaw(pcm)
+                    payload = base64.b64encode(ulaw).decode("ascii")
+                    await ws.send(json.dumps({
+                        "event": "media",
+                        "media": {"payload": payload, "timestamp": ts_ms},
+                    }))
+                    ts_ms += self.audio_cfg.frame_ms
+                else:
+                    await asyncio.sleep(poll_interval)
         except Exception as e:
             if self._alive:
                 logger.error(f"[{self._tag}] sip→ws: {e}")
@@ -747,6 +750,11 @@ class _WsSession:
                     if self.audio_port:
                         self.audio_port.clear_audio()
 
+                elif event == "stop":
+                    logger.info(f"[{self._tag}] Received stop event from server — hanging up")
+                    self._alive = False
+                    break
+
                 elif event == "mark":
                     pass
 
@@ -767,45 +775,58 @@ class _WsSession:
 if HAS_PJSIP:
 
     class _AudioPort(pj.AudioMediaPort):
+        """
+        Audio bridge using AudioMediaPort callbacks (pjproject 2.14.1+).
+        onFrameReceived: SIP audio → rx_queue (polled by WS session)
+        onFrameRequested: tx_buffer → SIP playback
+        """
+
         def __init__(self, call_sid: str, audio_cfg: AudioConfig):
             super().__init__()
             self.call_sid = call_sid
             self.audio_cfg = audio_cfg
-            self._on_capture: Optional[Callable[[bytes], None]] = None
-            self._play_buf = bytearray()
-            import threading
-            self._lock = threading.Lock()
-
-        def set_capture_callback(self, fn: Callable[[bytes], None]):
-            self._on_capture = fn
-
-        def feed_audio(self, pcm: bytes):
-            with self._lock:
-                self._play_buf.extend(pcm)
-
-        def clear_audio(self):
-            with self._lock:
-                self._play_buf.clear()
+            self._rx_queue: queue.Queue[bytes] = queue.Queue()
+            self._tx_buffer = b""
+            self._tx_lock = threading.Lock()
 
         def onFrameReceived(self, frame):
-            if frame.type == pj.PJMEDIA_FRAME_TYPE_AUDIO and self._on_capture:
-                try:
-                    self._on_capture(bytes(frame.buf[:frame.size]))
-                except Exception:
-                    pass
+            """Called by PJSIP when audio arrives from remote party."""
+            if frame.type == pj.PJMEDIA_FRAME_TYPE_AUDIO and frame.size > 0:
+                pcm = bytes(frame.buf[:frame.size])
+                self._rx_queue.put(pcm)
 
         def onFrameRequested(self, frame):
-            bpf = self.audio_cfg.bytes_per_frame
-            with self._lock:
-                if len(self._play_buf) >= bpf:
-                    chunk = bytes(self._play_buf[:bpf])
-                    del self._play_buf[:bpf]
-                    frame.buf = chunk
-                    frame.size = bpf
+            """Called by PJSIP when it needs audio to send to remote party."""
+            needed = self.audio_cfg.bytes_per_frame
+            with self._tx_lock:
+                if len(self._tx_buffer) >= needed:
+                    chunk = self._tx_buffer[:needed]
+                    self._tx_buffer = self._tx_buffer[needed:]
                 else:
-                    frame.buf = b"\x00" * bpf
-                    frame.size = bpf
-                frame.type = pj.PJMEDIA_FRAME_TYPE_AUDIO
+                    chunk = b"\x00" * needed
+
+            frame.buf.resize(len(chunk))
+            for i, b in enumerate(chunk):
+                frame.buf[i] = b
+            frame.size = len(chunk)
+            frame.type = pj.PJMEDIA_FRAME_TYPE_AUDIO
+
+        def get_frames(self) -> Optional[bytes]:
+            """Non-blocking read of captured audio (SIP → us)."""
+            try:
+                return self._rx_queue.get_nowait()
+            except queue.Empty:
+                return None
+
+        def feed_audio(self, pcm: bytes):
+            """Push audio for playback (us → SIP)."""
+            with self._tx_lock:
+                self._tx_buffer += pcm
+
+        def clear_audio(self):
+            """Clear playback buffer (barge-in)."""
+            with self._tx_lock:
+                self._tx_buffer = b""
 
 
     class _SipCallHandler(pj.Call):
@@ -831,7 +852,7 @@ if HAS_PJSIP:
 
         def onCallState(self, prm):
             ci = self.getInfo()
-            logger.info(f"[{self.call_sid[:8]}] State: {ci.stateText}")
+            logger.info(f"[{self.call_sid[:8]}] Call state: {ci.stateText} (SIP {ci.lastStatusCode})")
 
             status_map = {
                 pj.PJSIP_INV_STATE_CALLING: CallStatus.INITIATED,
@@ -899,13 +920,15 @@ if HAS_PJSIP:
 
                     audio_cfg = self.bridge.config.audio
                     self.audio_port = _AudioPort(self.call_sid, audio_cfg)
+
                     fmt = pj.MediaFormatAudio()
+                    fmt.type = pj.PJMEDIA_TYPE_AUDIO
                     fmt.clockRate = audio_cfg.clock_rate
                     fmt.channelCount = audio_cfg.channel_count
                     fmt.bitsPerSample = audio_cfg.bits_per_sample
                     fmt.frameTimeUsec = audio_cfg.frame_ms * 1000
-                    self.audio_port.createPort("bridge", fmt)
 
+                    self.audio_port.createPort("bridge", fmt)
                     aud_med.startTransmit(self.audio_port)
                     self.audio_port.startTransmit(aud_med)
                     self._connected = True
@@ -1036,5 +1059,9 @@ if HAS_PJSIP:
 
         def onRegState(self, prm):
             ai = self.getInfo()
-            status = "OK" if ai.regIsActive else "ÉCHEC"
-            logger.info(f"SIP Registration: {status} (code {ai.regStatus})")
+            if ai.regIsActive:
+                logger.info(f"SIP REGISTERED — {ai.uri} (code {ai.regStatus}, expires {ai.regExpiresSec}s)")
+            elif ai.regStatus // 100 == 2:
+                logger.info(f"SIP UNREGISTERED — {ai.uri} (code {ai.regStatus})")
+            else:
+                logger.error(f"SIP REGISTRATION FAILED — {ai.uri} (code {ai.regStatus}: {ai.regStatusText})")

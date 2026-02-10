@@ -4,13 +4,15 @@
  * Construit le system prompt + tools pour OpenAI Realtime API
  * à partir des données en BDD :
  *   - Menu complet avec prix et options
+ *   - Formules / menus composés
  *   - Config livraison (frais, minimum, seuil gratuit)
+ *   - Config réservation (places, durée, avance)
  *   - FAQ répondues (base de connaissances)
- *   - Client connu (prénom, adresse)
+ *   - Client connu (prénom, adresse, historique)
  *   - SIP credentials (propres au client ou fallback .env)
  *
  * Appelé par le SIP service Python via :
- *   GET /api/ai/prompt?restaurantId=xxx&callerPhone=0612345678
+ *   GET /api/ai?restaurantId=xxx&callerPhone=0612345678
  */
 
 import { getDb } from "@/lib/db";
@@ -29,8 +31,13 @@ export interface AiSessionConfig {
   systemPrompt: string;
   tools: Tool[];
   voice: string;
+  avgPrepTimeMin: number;
+  deliveryEnabled: boolean;
+  reservationEnabled: boolean;
   customerContext: CustomerContext | null;
   sipCredentials: SipCredentials;
+  /** Mapping index entier → {id: UUID, name: string} (items + formules) */
+  itemMap: Record<number, { id: string; name: string }>;
 }
 
 interface CustomerContext {
@@ -97,14 +104,16 @@ export const CUISINE_TYPES = [
 export type CuisineType = (typeof CUISINE_TYPES)[number];
 
 // ============================================================
-// BUILD MENU TEXT
+// BUILD MENU TEXT (articles à la carte)
 // ============================================================
 
 function buildMenuText(
   categories: MenuCategory[],
-  items: MenuItem[]
+  items: MenuItem[],
+  itemMap: Record<number, { id: string; name: string }>,
+  counter: { value: number },
 ): string {
-  const lines: string[] = ["MENU DU RESTAURANT :", ""];
+  const lines: string[] = ["CARTE / ARTICLES DISPONIBLES :", ""];
 
   for (const cat of categories) {
     const catItems = items.filter(
@@ -115,17 +124,21 @@ function buildMenuText(
     lines.push(`## ${cat.name}`);
 
     for (const item of catItems) {
-      let line = `- ${item.name} : ${item.price.toFixed(2)}€`;
+      const idx = counter.value++;
+      itemMap[idx] = { id: item.id, name: item.name };
+
+      let line = `- #${idx} ${item.name} : ${Number(item.price).toFixed(2)}€`;
       if (item.description) line += ` — ${item.description}`;
 
       const options = item.options as any[];
       if (options?.length > 0) {
         for (const opt of options) {
+          if (!opt.choices) continue;
           const choices = opt.choices
             .map((c: any) => {
               const extra =
                 c.price_modifier > 0
-                  ? ` (+${c.price_modifier.toFixed(2)}€)`
+                  ? ` (+${Number(c.price_modifier).toFixed(2)}€)`
                   : "";
               return `${c.label}${extra}`;
             })
@@ -136,10 +149,96 @@ function buildMenuText(
 
       const allergens = item.allergens as string[];
       if (allergens?.length > 0) {
-        line += `\n  Allergènes : ${allergens.join(", ")}`;
+        line += `\n  Allergenes : ${allergens.join(", ")}`;
       }
 
       lines.push(line);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+// ============================================================
+// BUILD FORMULES TEXT (menus composés, categoryId === null)
+// ============================================================
+
+function buildFormulesText(
+  categories: MenuCategory[],
+  items: MenuItem[],
+  itemMap: Record<number, { id: string; name: string }>,
+  counter: { value: number },
+): string {
+  const formules = items.filter((i) => i.categoryId === null && i.isAvailable);
+  if (formules.length === 0) return "";
+
+  const catMap = new Map(categories.map((c) => [c.id, c]));
+
+  // Reverse map UUID → index pour référencer les items par #N dans les options
+  const uuidToIdx = new Map<string, number>();
+  for (const [idx, entry] of Object.entries(itemMap)) {
+    uuidToIdx.set(entry.id, Number(idx));
+  }
+
+  const lines: string[] = ["FORMULES / MENUS :", ""];
+
+  for (const formule of formules) {
+    const idx = counter.value++;
+    itemMap[idx] = { id: formule.id, name: formule.name };
+
+    lines.push(`- #${idx} ${formule.name} : ${Number(formule.price).toFixed(2)}€`);
+    if (formule.description) lines.push(`  ${formule.description}`);
+
+    const options = formule.options as any[];
+    if (options?.length > 0) {
+      for (const opt of options) {
+        if (opt.source === "category") {
+          // Choix parmi une catégorie entière — afficher #N de chaque item
+          const cat = catMap.get(opt.categoryId);
+          const catItems = items.filter(
+            (i) => i.categoryId === opt.categoryId && i.isAvailable
+          );
+          const refs = catItems.map((i) => {
+            const refIdx = uuidToIdx.get(i.id);
+            return refIdx !== undefined ? `#${refIdx} ${i.name}` : i.name;
+          }).join(", ");
+          const maxPriceNote = opt.maxPrice
+            ? ` (max ${Number(opt.maxPrice).toFixed(2)}€)`
+            : "";
+          lines.push(
+            `  ${opt.name || cat?.name || "Choix"} [${opt.required !== false ? "obligatoire" : "optionnel"}]${maxPriceNote} : ${refs || "voir carte"}`
+          );
+        } else if (opt.source === "items") {
+          // Choix parmi des items spécifiques — afficher #N
+          const refs = (opt.itemIds || [])
+            .map((id: string) => {
+              const refIdx = uuidToIdx.get(id);
+              const item = items.find((i) => i.id === id);
+              if (!item) return null;
+              return refIdx !== undefined ? `#${refIdx} ${item.name}` : item.name;
+            })
+            .filter(Boolean)
+            .join(", ");
+          lines.push(
+            `  ${opt.name || "Choix"} [${opt.required !== false ? "obligatoire" : "optionnel"}] : ${refs || "voir carte"}`
+          );
+        } else if (opt.choices) {
+          // Format choices classique (variantes — pas des items, juste des labels)
+          const choices = opt.choices
+            .map((c: any) => {
+              const extra =
+                c.price_modifier > 0
+                  ? ` (+${Number(c.price_modifier).toFixed(2)}€)`
+                  : "";
+              return `${c.label}${extra}`;
+            })
+            .join(", ");
+          lines.push(
+            `  ${opt.name} [${opt.required ? "obligatoire" : "optionnel"}] : ${choices}`
+          );
+        }
+      }
     }
     lines.push("");
   }
@@ -153,28 +252,44 @@ function buildMenuText(
 
 function buildDeliveryText(restaurant: Restaurant): string {
   if (!restaurant.deliveryEnabled) {
-    return "LIVRAISON : Non disponible. Uniquement à emporter.";
+    return "LIVRAISON : Non disponible. Uniquement retrait sur place (a emporter).";
   }
 
   const lines = [
     "LIVRAISON :",
-    `- Rayon de livraison : ${restaurant.deliveryRadiusKm} km`,
-    `- Commande minimum : ${restaurant.minOrderAmount.toFixed(2)}€`,
+    `- Rayon : ${restaurant.deliveryRadiusKm} km`,
+    `- Commande minimum : ${Number(restaurant.minOrderAmount).toFixed(2)}€`,
   ];
 
-  if (restaurant.deliveryFreeAbove && restaurant.deliveryFreeAbove > 0) {
+  if (restaurant.deliveryFreeAbove && Number(restaurant.deliveryFreeAbove) > 0) {
     lines.push(
-      `- Frais de livraison : ${restaurant.deliveryFee.toFixed(2)}€ (GRATUIT au-dessus de ${restaurant.deliveryFreeAbove.toFixed(2)}€)`
+      `- Frais : ${Number(restaurant.deliveryFee).toFixed(2)}€ (GRATUIT au-dessus de ${Number(restaurant.deliveryFreeAbove).toFixed(2)}€)`
     );
-  } else if (restaurant.deliveryFee > 0) {
-    lines.push(`- Frais de livraison : ${restaurant.deliveryFee.toFixed(2)}€`);
+  } else if (Number(restaurant.deliveryFee) > 0) {
+    lines.push(`- Frais : ${Number(restaurant.deliveryFee).toFixed(2)}€`);
   } else {
-    lines.push("- Frais de livraison : GRATUIT");
+    lines.push("- Frais : GRATUIT");
   }
 
-  lines.push(`- Temps de préparation moyen : ${restaurant.avgPrepTimeMin} min`);
+  lines.push(`- Temps de preparation moyen : ${restaurant.avgPrepTimeMin} min`);
 
   return lines.join("\n");
+}
+
+// ============================================================
+// BUILD RESERVATION TEXT
+// ============================================================
+
+function buildReservationText(restaurant: Restaurant): string {
+  if (!restaurant.reservationEnabled) return "";
+
+  return [
+    "",
+    "RESERVATION DE TABLE :",
+    `- Places totales : ${restaurant.totalSeats}`,
+    `- Duree moyenne d'un repas : ${restaurant.avgMealDurationMin} min`,
+    `- Reservation possible : minimum ${restaurant.minReservationAdvanceMin} min a l'avance, jusqu'a ${restaurant.maxReservationAdvanceDays} jours`,
+  ].join("\n");
 }
 
 // ============================================================
@@ -182,144 +297,382 @@ function buildDeliveryText(restaurant: Restaurant): string {
 // ============================================================
 
 function buildFaqText(faqs: Faq[]): string {
-  if (faqs.length === 0) return "";
-
   const lines = [
     "",
     "BASE DE CONNAISSANCES (FAQ) :",
-    "Si un client pose une de ces questions, réponds directement.",
-    "",
   ];
 
-  for (const faq of faqs) {
-    lines.push(`Q: ${faq.question}`);
-    lines.push(`R: ${faq.answer}`);
-    lines.push("");
+  if (faqs.length > 0) {
+    lines.push(
+      "Voici les questions frequentes. Si le client pose une de ces questions, reponds DIRECTEMENT avec la reponse fournie.",
+      ""
+    );
+    for (const faq of faqs) {
+      lines.push(`Q: ${faq.question}`);
+      lines.push(`R: ${faq.answer}`);
+      lines.push("");
+    }
+  } else {
+    lines.push("Aucune FAQ enregistree pour le moment.", "");
   }
 
   lines.push(
-    "Si le client pose une question qui n'est PAS dans cette FAQ et que tu ne connais pas la réponse,",
-    "appelle la fonction log_new_faq pour la remonter au restaurateur.",
-    "Dis au client : \"Je n'ai pas cette information, je remonte votre question au restaurant.\""
+    "IMPORTANT — Questions non couvertes par la FAQ :",
+    "- Si le client pose une question dont la reponse N'EST PAS dans la FAQ ci-dessus",
+    "  et que tu ne connais PAS la reponse de facon certaine :",
+    '  1. Appelle log_new_faq avec la question reformulee et la categorie appropriee',
+    '  2. Dis au client : "Je n\'ai pas cette information, je remonte votre question au restaurant."',
+    "- NE PAS inventer de reponse. NE PAS deviner les horaires, les prix, ou les services non mentionnes.",
+    "- Les categories disponibles : horaires, livraison, allergens, paiement, parking, reservation, promotion, ingredients, other"
   );
 
   return lines.join("\n");
 }
 
 // ============================================================
-// BUILD SYSTEM PROMPT
+// BUILD SYSTEM PROMPT — Prompt structuré prise de commande
 // ============================================================
 
 function buildSystemPrompt(
   restaurant: Restaurant,
   menuText: string,
+  formulesText: string,
   deliveryText: string,
   faqText: string,
   customer: CustomerContext | null
 ): string {
+  // Heure actuelle en timezone Paris
+  const now = new Date();
+  const parisTime = now.toLocaleString("fr-FR", {
+    timeZone: "Europe/Paris",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const parisHHMM = now.toLocaleString("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  // Horaires lisibles
+  const hoursText =
+    (restaurant.openingHoursText || []).length > 0
+      ? restaurant.openingHoursText.join("\n")
+      : JSON.stringify(restaurant.openingHours, null, 2);
+
+  // Section client
   const customerSection = customer
     ? [
-        "",
-        "CLIENT IDENTIFIÉ :",
-        `- Prénom : ${customer.firstName || "inconnu"}`,
-        `- Téléphone : ${customer.phone}`,
-        `- Commandes précédentes : ${customer.totalOrders}`,
-        `- Total dépensé : ${customer.totalSpent.toFixed(2)}€`,
+        "CLIENT IDENTIFIE :",
+        `- Prenom : ${customer.firstName || "inconnu"}`,
+        `- Telephone : ${customer.phone}`,
+        `- Commandes precedentes : ${customer.totalOrders}`,
+        `- Total depense : ${customer.totalSpent.toFixed(2)}€`,
         customer.deliveryAddress
-          ? `- Dernière adresse : ${customer.deliveryAddress}, ${customer.deliveryPostalCode || ""} ${customer.deliveryCity || ""}`
-          : "- Pas d'adresse de livraison enregistrée",
+          ? `- Derniere adresse : ${customer.deliveryAddress}, ${customer.deliveryPostalCode || ""} ${customer.deliveryCity || ""}`
+          : "- Pas d'adresse de livraison enregistree",
         customer.deliveryNotes
           ? `- Notes de livraison : ${customer.deliveryNotes}`
           : "",
         "",
-        "→ Accueille-le par son prénom et propose la même adresse si livraison.",
-      ].join("\n")
-    : "\nNOUVEAU CLIENT : Demande son prénom. Si livraison, demande l'adresse.";
+        "→ Accueille-le par son prenom. Si livraison, propose la meme adresse.",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "NOUVEAU CLIENT : Demande son prenom. Si livraison, demande l'adresse complete (rue, code postal, ville).";
 
-  return `Tu es l'assistant vocal de ${restaurant.name} (restaurant ${restaurant.cuisineType || "autre"}).
-${restaurant.aiInstructions || "Sois chaleureux, efficace, et aide le client à passer sa commande."}
+  // Info frais de livraison pour les règles
+  let deliveryFeeRule = "";
+  if (restaurant.deliveryEnabled) {
+    if (restaurant.deliveryFreeAbove && Number(restaurant.deliveryFreeAbove) > 0) {
+      deliveryFeeRule = `Les frais de livraison sont de ${Number(restaurant.deliveryFee).toFixed(2)}€, GRATUITS au-dessus de ${Number(restaurant.deliveryFreeAbove).toFixed(2)}€.`;
+    } else if (Number(restaurant.deliveryFee) > 0) {
+      deliveryFeeRule = `Les frais de livraison sont de ${Number(restaurant.deliveryFee).toFixed(2)}€.`;
+    } else {
+      deliveryFeeRule = "La livraison est GRATUITE.";
+    }
+  }
 
-RÈGLES :
-- Parle en français naturel, comme un vrai employé au téléphone.
-- Sois concis : pas de phrases trop longues (le client écoute, il ne lit pas).
-- Répète toujours le récapitulatif de commande avant de confirmer.
-- Calcule le total TTC et annonce-le clairement.
-- Si un article n'est pas au menu, dis-le poliment et propose une alternative.
-- Si le client demande les horaires ou l'adresse, réponds.
+  // Modes disponibles
+  const modes: string[] = [];
+  modes.push("sur place (a emporter)");
+  if (restaurant.deliveryEnabled) modes.push("en livraison");
+  if (restaurant.reservationEnabled) modes.push("reserver une table");
+  const modesText = modes.join(", ");
+
+  const reservationText = buildReservationText(restaurant);
+
+  // Règles de logique dynamiques
+  let ruleNumber = 1;
+  const rules: string[] = [];
+
+  rules.push(`${ruleNumber}. DEMANDER LE MODE :
+   "Que souhaitez-vous ? Commander ${restaurant.deliveryEnabled ? "a emporter, en livraison" : "a emporter"}${restaurant.reservationEnabled ? ", ou reserver une table" : ""} ?"
+   → Selon la reponse, suivre le flow correspondant.`);
+  ruleNumber++;
+
+  rules.push(`${ruleNumber}. VERIFICATION OBLIGATOIRE — check_availability :
+   Tu DOIS appeler check_availability AVANT de confirmer quoi que ce soit.
+   - Mode "pickup" : appeler avec mode="pickup". Tu recevras estimatedTime (HH:MM).
+   - Mode "delivery" : demander l'adresse, puis appeler avec mode="delivery" + adresse.
+     Si available=false → proposer le retrait sur place.
+     ${restaurant.deliveryEnabled ? `Si le total est inferieur a ${Number(restaurant.minOrderAmount).toFixed(2)}€ → refuser la livraison.` : ""}
+     ${deliveryFeeRule}
+   ${restaurant.reservationEnabled ? `- Mode "reservation" : demander nombre de personnes + heure souhaitee, puis appeler avec mode="reservation" + party_size + requested_time.
+     Si available=false → proposer un autre creneau.` : ""}
+   - Si le client veut une heure specifique, passe requested_time (HH:MM).
+   - Le tool retourne estimatedTime (HH:MM) → c'est cette heure que tu annonces au client.
+   - Si le client veut plus tot que estimatedTime, dis que ce n'est pas possible.`);
+  ruleNumber++;
+
+  if (restaurant.deliveryEnabled) {
+    rules.push(`${ruleNumber}. LIVRAISON :
+   a. Recuperer ou confirmer l'adresse complete (rue, ville, code postal)
+   b. Appeler check_availability(mode="delivery", ...) → tu recevras estimatedTime et deliveryFee
+   c. Annoncer les frais de livraison AVANT la confirmation
+   d. Annoncer l'heure de livraison retournee par check_availability`);
+    ruleNumber++;
+  }
+
+  rules.push(`${ruleNumber}. GESTION DU MENU :
+   - Si un article n'est pas au menu, dis-le poliment et propose une alternative
+   - Propose les formules si elles sont avantageuses pour le client
+   - Pour les formules, demande chaque choix obligatoire un par un`);
+  ruleNumber++;
+
+  rules.push(`${ruleNumber}. RECAPITULATION (avant confirm_order) :
+   - Reformuler la commande complete a voix haute
+   - Annoncer le total TTC (articles + frais de livraison si applicable)
+   - Annoncer l'heure de retrait / livraison (celle retournee par check_availability)
+   - Obtenir la confirmation explicite du client`);
+  ruleNumber++;
+
+  if (restaurant.reservationEnabled) {
+    rules.push(`${ruleNumber}. RESERVATION DE TABLE :
+   a. Demander le nombre de personnes et l'heure souhaitee
+   b. Demander s'il a une preference de placement (fenetre, exterieur, grande table, coin calme, bar)
+   c. Appeler check_availability(mode="reservation", party_size=N, requested_time="HH:MM", seating_preference=...)
+   d. Si available=true → annoncer l'heure confirmee et le nombre de places
+   e. Si available=false → expliquer la raison et proposer un autre creneau
+   f. Obtenir la confirmation du client
+   g. Si le client a des demandes speciales (anniversaire, chaise bebe, etc.), les noter
+   h. Appeler confirm_reservation avec les infos. IMPORTANT: resume les notes du client de facon claire et concise dans le champ "notes".`);
+    ruleNumber++;
+  }
+
+  rules.push(`${ruleNumber}. MESSAGES ET DEMANDES SPECIALES :
+   - Si le client veut laisser un message, etre rappele, a une reclamation ou une demande speciale : utiliser leave_message
+   - Resume le message de facon claire et concise
+   - Si le client ne passe ni commande ni reservation, propose-lui de laisser un message avant de raccrocher`);
+  ruleNumber++;
+
+  // Verbatim réservation
+  const reservationVerbatim = restaurant.reservationEnabled
+    ? `
+Reservation - nombre de personnes :
+"Pour combien de personnes souhaitez-vous reserver ?"
+
+Reservation - heure :
+"A quelle heure souhaitez-vous venir ?"
+
+Reservation - preference placement :
+"Avez-vous une preference ? Pres de la fenetre, en exterieur, une grande table ?"
+
+Reservation - confirmation :
+"Parfait, je vous reserve une table pour [N] personnes a [heure]${restaurant.reservationEnabled ? "[, pres de la fenetre / en exterieur / ...]" : ""}. C'est bien ca ?"
+
+Reservation - indisponible :
+"Malheureusement, nous n'avons plus de place a ce creneau. Souhaitez-vous un autre horaire ?"
+
+Message :
+"Tres bien, je transmets votre message au restaurant. [resume]. Autre chose ?"`
+    : "";
+
+  return `ROLE :
+Tu es l'agent de prise de commande telephonique de "${restaurant.name}" (${restaurant.cuisineType || "restaurant"}).
+${restaurant.aiInstructions || "Ton objectif : prendre une commande claire et complete, ou gerer une reservation de table, en validant explicitement l'heure avec le client."}
+
+STYLE VOCAL :
+- Parle en francais naturel, comme un vrai employe au telephone.
+- Phrases courtes et directes (le client ecoute, il ne lit pas).
+- Pas de listes a puces a l'oral, reformule naturellement.
+- Confirme chaque article ajoute : "Parfait, une Margherita a 9 euros, c'est note !"
+- Recapitule naturellement : "Alors on a une Margherita et deux Cocas, ca fait 13 euros 50."
 
 INFORMATIONS RESTAURANT :
 - Nom : ${restaurant.name}
 - Type : ${restaurant.cuisineType || "autre"}
-- Adresse : ${restaurant.address}, ${restaurant.postalCode || ""} ${restaurant.city || ""}
-- Téléphone : ${restaurant.phone || "non communiqué"}
+- Adresse : ${restaurant.address || ""}${restaurant.postalCode ? `, ${restaurant.postalCode}` : ""} ${restaurant.city || ""}
+- Telephone : ${restaurant.phone || "non communique"}
+- Services disponibles : ${modesText}
 
-${deliveryText}
-
-TARIFICATION LIVRAISON :
-- Si le total de la commande est inférieur à ${restaurant.minOrderAmount.toFixed(2)}€, refuse poliment la livraison et propose le retrait.
-- Annonce les frais de livraison AVANT la confirmation.
-- Le total final = total articles + frais de livraison.
-
-${menuText}
-${faqText}
-${customerSection}
+HEURE ACTUELLE : ${parisTime} (${parisHHMM})
 
 HORAIRES :
-${JSON.stringify(restaurant.openingHours, null, 2)}
+${hoursText}
 
-FONCTIONS À APPELER :
-- confirm_order : quand la commande est confirmée par le client
-- check_delivery_address : quand le client donne une adresse de livraison
-- save_customer_info : quand le client donne son prénom ou une nouvelle adresse
-- log_new_faq : quand le client pose une question ABSENTE de la FAQ et que tu ne connais pas la réponse`;
+${menuText}
+${formulesText}
+${deliveryText}
+${reservationText}
+
+${customerSection}
+${faqText}
+
+========================================
+REGLES DE LOGIQUE (OBLIGATOIRES)
+========================================
+
+${rules.join("\n\n")}
+
+========================================
+VERBATIM A UTILISER
+========================================
+
+Accueil :
+"Bonjour, ${restaurant.name}, ${customer?.firstName ? customer.firstName + " " : ""}a votre ecoute !"
+
+Mode :
+"Que souhaitez-vous ? Commander ${restaurant.deliveryEnabled ? "a emporter, en livraison" : "a emporter"}${restaurant.reservationEnabled ? ", ou reserver une table" : ""} ?"
+
+Validation horaire (livraison) :
+"Votre commande pourrait etre livree vers [estimatedTime]. Ca vous convient ?"
+
+Validation horaire (retrait) :
+"Votre commande sera prete vers [estimatedTime]. Ca vous convient ?"
+${reservationVerbatim}
+
+Recap :
+"Alors je recapitule : [commande]. Le total fait [total] euros${restaurant.deliveryEnabled ? " [dont X euros de livraison si applicable]" : ""}. C'est bien ca ?"
+
+========================================
+FONCTIONS DISPONIBLES
+========================================
+
+- check_availability : OBLIGATOIRE avant toute confirmation. Modes : pickup, delivery, reservation.
+  Retourne available, estimatedTime (HH:MM), et infos supplementaires selon le mode.
+  Pour reservation : ajouter seating_preference si le client a une preference de placement.
+- confirm_order : commande confirmee par le client → l'heure vient du dernier check_availability
+${restaurant.reservationEnabled ? "- confirm_reservation : reserver une table confirmee par le client. Inclure seating_preference et notes resumees.\n" : ""}- save_customer_info : sauvegarder prenom / adresse (appeler des que le client donne ces infos)
+- log_new_faq : remonter une question ABSENTE de la FAQ (dire au client "je n'ai pas cette info")
+- leave_message : laisser un message pour le restaurant (rappel, reclamation, demande speciale)
+
+========================================
+CONTROLES AVANT CLOTURE
+========================================
+
+Avant d'appeler confirm_order, VERIFIE que TOUS ces points sont valides :
+- Mode (retrait / livraison / sur place) confirme
+- check_availability appele et available=true
+- Si livraison : adresse verifiee, zone OK, frais annonces
+- Commande recapitulee a voix haute
+- Total annonce (articles + livraison)
+- Heure annoncee (celle retournee par check_availability) et validee par le client
+- Confirmation explicite du client ("Oui c'est bon" / "Parfait" / "C'est tout")
+${restaurant.reservationEnabled ? `
+Avant d'appeler confirm_reservation :
+- check_availability(mode="reservation") appele et available=true
+- Nombre de personnes et heure confirmes par le client
+- Nom et telephone du client obtenus
+- Si preference de placement demandee, l'inclure
+- Notes resumees clairement (anniversaire, allergies, chaise bebe, etc.)` : ""}
+
+Si le client ne commande pas et ne reserve pas :
+- Proposer de laisser un message : "Souhaitez-vous laisser un message pour le restaurant ?"
+- Si oui, utiliser leave_message avec un resume clair du message`;
 }
 
 // ============================================================
 // TOOLS (OpenAI function calling)
 // ============================================================
 
-function buildTools(): Tool[] {
-  return [
+function buildTools(restaurant: Restaurant): Tool[] {
+  const tools: Tool[] = [
+    {
+      type: "function",
+      name: "check_availability",
+      description:
+        "Verifie la disponibilite selon le mode (pickup, delivery, reservation). OBLIGATOIRE avant confirm_order ou confirm_reservation. Retourne : available, estimatedTime (HH:MM), estimatedTimeISO. Pour delivery : aussi deliveryDistanceKm, deliveryDurationMin, deliveryFee, customerAddressFormatted. Pour reservation : aussi seatsAvailable.",
+      parameters: {
+        type: "object",
+        properties: {
+          mode: {
+            type: "string",
+            enum: ["pickup", "delivery", "reservation"],
+            description: "Mode : retrait sur place, livraison, ou reservation de table",
+          },
+          requested_time: {
+            type: "string",
+            description: "Heure souhaitee par le client (format HH:MM). Optionnel : si absent, calcule le plus tot possible.",
+          },
+          customer_address: {
+            type: "string",
+            description: "Adresse du client (rue + numero). Obligatoire si mode=delivery.",
+          },
+          customer_city: {
+            type: "string",
+            description: "Ville du client",
+          },
+          customer_postal_code: {
+            type: "string",
+            description: "Code postal du client",
+          },
+          party_size: {
+            type: "integer",
+            description: "Nombre de personnes. Obligatoire si mode=reservation.",
+          },
+          seating_preference: {
+            type: "string",
+            enum: ["window", "outdoor", "large_table", "quiet", "bar"],
+            description: "Preference de placement du client (fenetre, exterieur, grande table, coin calme, bar). Optionnel.",
+          },
+        },
+        required: ["mode"],
+      },
+    },
     {
       type: "function",
       name: "confirm_order",
       description:
-        "Confirme et enregistre la commande du client. Appeler UNIQUEMENT quand le client a explicitement confirmé.",
+        "Confirme et enregistre la commande. L'heure estimee vient du dernier check_availability (stocke automatiquement). Appeler UNIQUEMENT apres : check_availability OK, commande recapitulee, total annonce, heure annoncee, confirmation explicite du client.",
       parameters: {
         type: "object",
         properties: {
           order_type: {
             type: "string",
-            enum: ["pickup", "delivery"],
-            description: "Type de commande : retrait ou livraison",
+            enum: ["pickup", "delivery", "dine_in"],
+            description: "Mode de la commande",
           },
           items: {
             type: "array",
-            description: "Liste des articles commandés",
+            description: "Articles commandes. Utilise le #id du menu pour chaque article.",
             items: {
               type: "object",
               properties: {
-                name: { type: "string", description: "Nom exact de l'article" },
-                quantity: { type: "integer", description: "Quantité" },
+                id: { type: "integer", description: "Numero #id de l'article ou formule (ex: 3 pour #3)" },
+                quantity: { type: "integer", description: "Quantite" },
                 unit_price: { type: "number", description: "Prix unitaire en euros" },
                 selected_options: {
                   type: "array",
                   items: {
                     type: "object",
                     properties: {
-                      name: { type: "string" },
-                      choice: { type: "string" },
-                      extra_price: { type: "number" },
+                      name: { type: "string", description: "Nom de l'option (ex: Taille, Entree, Plat)" },
+                      choice_id: { type: "integer", description: "Numero #id du choix (pour les formules, ex: #2 pour Salade Cesar)" },
+                      choice: { type: "string", description: "Label du choix (pour les variantes simples, ex: Grande)" },
+                      extra_price: { type: "number", description: "Supplement en euros" },
                     },
                   },
-                  description: "Options choisies (taille, suppléments...)",
+                  description: "Options choisies. Pour les formules : utiliser choice_id (#id). Pour les variantes simples (taille, sauce) : utiliser choice (label).",
                 },
                 notes: {
                   type: "string",
-                  description: "Remarques sur l'article (sans tomate, bien cuit...)",
+                  description: "Remarques (sans oignons, bien cuit...)",
                 },
               },
-              required: ["name", "quantity", "unit_price"],
+              required: ["id", "quantity", "unit_price"],
             },
           },
           subtotal: { type: "number", description: "Sous-total articles en euros" },
@@ -331,54 +684,31 @@ function buildTools(): Tool[] {
             type: "number",
             description: "Total TTC (articles + livraison)",
           },
-          delivery_address: {
-            type: "string",
-            description: "Adresse de livraison (si livraison)",
-          },
           payment_method: {
             type: "string",
             enum: ["cash", "card", "online"],
-            description: "Mode de paiement",
+            description: "Mode de paiement choisi",
           },
-          notes: { type: "string", description: "Notes générales" },
-          estimated_time_min: {
-            type: "integer",
-            description: "Temps estimé annoncé au client",
-          },
+          notes: { type: "string", description: "Notes generales sur la commande" },
         },
         required: ["order_type", "items", "total"],
       },
     },
     {
       type: "function",
-      name: "check_delivery_address",
-      description:
-        "Vérifie si une adresse est dans la zone de livraison et calcule le temps.",
-      parameters: {
-        type: "object",
-        properties: {
-          address: { type: "string", description: "Adresse du client (rue + numéro)" },
-          city: { type: "string", description: "Ville" },
-          postal_code: { type: "string", description: "Code postal" },
-        },
-        required: ["address"],
-      },
-    },
-    {
-      type: "function",
       name: "save_customer_info",
       description:
-        "Sauvegarde le prénom ou une nouvelle adresse du client.",
+        "Sauvegarde le prenom ou une nouvelle adresse du client. Appeler des que le client donne son prenom ou une adresse.",
       parameters: {
         type: "object",
         properties: {
-          first_name: { type: "string", description: "Prénom du client" },
+          first_name: { type: "string", description: "Prenom du client" },
           delivery_address: { type: "string", description: "Adresse de livraison" },
           delivery_city: { type: "string", description: "Ville" },
           delivery_postal_code: { type: "string", description: "Code postal" },
           delivery_notes: {
             type: "string",
-            description: "Instructions (code porte, étage...)",
+            description: "Instructions (code porte, etage, batiment...)",
           },
         },
       },
@@ -387,13 +717,13 @@ function buildTools(): Tool[] {
       type: "function",
       name: "log_new_faq",
       description:
-        "Remonte une question du client que tu ne trouves PAS dans la FAQ et dont tu ne connais PAS la réponse. Ne PAS appeler si la FAQ contient déjà la réponse.",
+        "Remonte une question du client ABSENTE de la FAQ et dont tu ne connais PAS la reponse. Ne PAS appeler si la FAQ contient deja la reponse.",
       parameters: {
         type: "object",
         properties: {
           question: {
             type: "string",
-            description: "La question posée par le client, reformulée clairement",
+            description: "La question posee par le client, reformulee clairement",
           },
           category: {
             type: "string",
@@ -406,15 +736,89 @@ function buildTools(): Tool[] {
               "reservation",
               "promotion",
               "ingredients",
+              "localisation",
+              "info_restau",
               "other",
             ],
-            description: "Catégorie de la question",
+            description: "Categorie de la question",
           },
         },
         required: ["question", "category"],
       },
     },
+    {
+      type: "function",
+      name: "leave_message",
+      description:
+        "Laisse un message pour le restaurant. Utiliser quand : (1) le client demande explicitement de laisser un message, (2) le client a une demande speciale a transmettre, (3) le client veut etre rappele, (4) le client a une reclamation. Resume le message de facon claire et concise.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: {
+            type: "string",
+            description: "Resume clair et concis du message a transmettre au restaurant",
+          },
+          caller_name: {
+            type: "string",
+            description: "Nom de la personne qui laisse le message",
+          },
+          category: {
+            type: "string",
+            enum: ["callback_request", "complaint", "info_request", "special_request", "other"],
+            description: "Categorie : demande de rappel, reclamation, demande d'info, demande speciale, autre",
+          },
+          is_urgent: {
+            type: "boolean",
+            description: "True si le message est urgent (reclamation grave, probleme de sante...)",
+          },
+        },
+        required: ["content", "category"],
+      },
+    },
   ];
+
+  // Ajouter confirm_reservation si activé
+  if (restaurant.reservationEnabled) {
+    tools.push({
+      type: "function",
+      name: "confirm_reservation",
+      description:
+        "Confirme et enregistre une reservation de table. Appeler UNIQUEMENT apres : check_availability(mode='reservation') OK, nombre de personnes et heure confirmes, nom et telephone du client obtenus.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: {
+            type: "string",
+            description: "Nom du client pour la reservation",
+          },
+          customer_phone: {
+            type: "string",
+            description: "Telephone du client",
+          },
+          party_size: {
+            type: "integer",
+            description: "Nombre de personnes",
+          },
+          reservation_time: {
+            type: "string",
+            description: "Heure de la reservation (format HH:MM), celle confirmee par check_availability",
+          },
+          seating_preference: {
+            type: "string",
+            enum: ["window", "outdoor", "large_table", "quiet", "bar"],
+            description: "Preference de placement : fenetre, exterieur, grande table, coin calme, bar",
+          },
+          notes: {
+            type: "string",
+            description: "Notes resumees (anniversaire, chaise bebe, allergies...)",
+          },
+        },
+        required: ["customer_name", "customer_phone", "party_size", "reservation_time"],
+      },
+    });
+  }
+
+  return tools;
 }
 
 // ============================================================
@@ -432,7 +836,6 @@ async function resolveSipCredentials(
     isActive: true,
   });
 
-  // Si le client a ses propres credentials SIP
   if (phoneLine?.sipDomain && phoneLine?.sipUsername && phoneLine?.sipPassword) {
     return {
       domain: phoneLine.sipDomain,
@@ -442,7 +845,6 @@ async function resolveSipCredentials(
     };
   }
 
-  // Fallback : ligne de démo (tes credentials dans .env)
   return {
     domain: process.env.SIP_DOMAIN || "sip.twilio.com",
     username: process.env.SIP_USERNAME || "",
@@ -466,7 +868,7 @@ export async function buildAiSessionConfig(
     id: restaurantId,
   });
 
-  // 2. Menu
+  // 2. Menu (catégories + tous les items, y compris formules)
   const categories = await ds.getRepository(MenuCategory).find({
     where: { restaurantId, isActive: true },
     order: { displayOrder: "ASC" },
@@ -508,13 +910,19 @@ export async function buildAiSessionConfig(
   // 5. SIP credentials
   const sipCredentials = await resolveSipCredentials(restaurantId);
 
-  // 6. Build
-  const menuText = buildMenuText(categories, items);
+  // 6. Build prompt sections + itemMap
+  const itemMap: Record<number, { id: string; name: string }> = {};
+  const counter = { value: 1 };
+
+  const menuText = buildMenuText(categories, items, itemMap, counter);
+  const formulesText = buildFormulesText(categories, items, itemMap, counter);
   const deliveryText = buildDeliveryText(restaurant);
   const faqText = buildFaqText(faqs);
+
   const systemPrompt = buildSystemPrompt(
     restaurant,
     menuText,
+    formulesText,
     deliveryText,
     faqText,
     customerContext
@@ -522,9 +930,13 @@ export async function buildAiSessionConfig(
 
   return {
     systemPrompt,
-    tools: buildTools(),
+    tools: buildTools(restaurant),
     voice: restaurant.aiVoice || "sage",
+    avgPrepTimeMin: restaurant.avgPrepTimeMin,
+    deliveryEnabled: restaurant.deliveryEnabled,
+    reservationEnabled: restaurant.reservationEnabled,
     customerContext,
     sipCredentials,
+    itemMap,
   };
 }

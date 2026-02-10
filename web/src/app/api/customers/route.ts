@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       restaurantId,
       phone,
       ...data,
-    });
+    } as Partial<Customer>) as Customer;
     customer = await ds.getRepository(Customer).save(customer);
   }
 
