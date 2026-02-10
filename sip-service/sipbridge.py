@@ -592,9 +592,20 @@ class SipBridge:
             pass
         finally:
             import os
+            import threading
 
-            def _cleanup_pjsip():
-                """Cleanup pjlib calls from a registered thread."""
+            # Watchdog: force exit after 3s no matter what
+            def _watchdog():
+                import time
+                time.sleep(3)
+                logger.warning("Watchdog: force exit (3s)")
+                os._exit(0)
+
+            wd = threading.Thread(target=_watchdog, daemon=True)
+            wd.start()
+
+            # Quick hangup of active calls (no libDestroy!)
+            def _hangup_calls():
                 try:
                     if self._endpoint:
                         self._endpoint.libRegisterThread("cleanup")
@@ -612,18 +623,18 @@ class SipBridge:
                         except Exception:
                             pass
                 self.active_calls.clear()
-                self.pjsip_shutdown()
+                # Skip ep.libDestroy() — it causes UE zombie processes on macOS
 
             try:
                 await asyncio.wait_for(
-                    self.loop.run_in_executor(self._executor, _cleanup_pjsip),
-                    timeout=3.0,
+                    self.loop.run_in_executor(self._executor, _hangup_calls),
+                    timeout=2.0,
                 )
-            except asyncio.TimeoutError:
-                logger.warning("pjsip cleanup timeout (3s) — force exit")
-                os._exit(0)
-            self._executor.shutdown(wait=False)
+            except (asyncio.TimeoutError, Exception):
+                pass
+
             logger.info("Bye.")
+            os._exit(0)
 
 
 # ============================================================
