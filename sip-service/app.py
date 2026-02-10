@@ -414,6 +414,78 @@ async def handle_check_order_status(args: dict, ctx: dict) -> dict:
         return {"found": False, "orders": [], "error": "Impossible de verifier le statut"}
 
 
+async def handle_cancel_order(args: dict, ctx: dict) -> dict:
+    """Annule une commande via PATCH /api/orders."""
+    order_number = args.get("order_number")
+    if not order_number:
+        return {"success": False, "error": "Numero de commande requis"}
+
+    try:
+        # Retrouver l'ID de la commande via le numéro
+        orders = await api_get("/api/orders/status", {
+            "restaurantId": ctx["restaurant_id"],
+            "phone": ctx.get("caller_phone", ""),
+        })
+        target = None
+        for o in orders.get("orders", []):
+            if o.get("orderNumber") == order_number:
+                target = o
+                break
+
+        if not target:
+            return {"success": False, "error": f"Commande #{order_number} introuvable"}
+
+        if target["status"] not in ("pending", "confirmed"):
+            return {
+                "success": False,
+                "error": f"Annulation impossible : la commande est deja en statut '{target['status']}'",
+            }
+
+        # L'API orders/status ne retourne pas l'ID, on doit chercher autrement
+        # On utilise directement l'API orders avec restaurantId + filter
+        result = await api_patch("/api/orders", {
+            "id": target.get("id"),
+            "status": "cancelled",
+        })
+        logger.info(f"Commande #{order_number} annulee")
+        return {"success": True, "message": f"Commande #{order_number} annulee"}
+    except Exception as e:
+        logger.error(f"Erreur cancel_order: {e}")
+        return {"success": False, "error": "Erreur lors de l'annulation"}
+
+
+async def handle_lookup_reservation(args: dict, ctx: dict) -> dict:
+    """Recherche les réservations du client via GET /api/reservations/lookup."""
+    phone = args.get("customer_phone") or ctx.get("caller_phone", "")
+    try:
+        result = await api_get("/api/reservations/lookup", {
+            "restaurantId": ctx["restaurant_id"],
+            "phone": phone,
+        })
+        return result
+    except Exception as e:
+        logger.error(f"Erreur lookup_reservation: {e}")
+        return {"found": False, "reservations": [], "error": "Impossible de chercher les reservations"}
+
+
+async def handle_cancel_reservation(args: dict, ctx: dict) -> dict:
+    """Annule une réservation via PATCH /api/reservations."""
+    reservation_id = args.get("reservation_id")
+    if not reservation_id:
+        return {"success": False, "error": "ID de reservation requis"}
+
+    try:
+        result = await api_patch("/api/reservations", {
+            "id": reservation_id,
+            "status": "cancelled",
+        })
+        logger.info(f"Reservation {reservation_id} annulee")
+        return {"success": True, "message": "Reservation annulee"}
+    except Exception as e:
+        logger.error(f"Erreur cancel_reservation: {e}")
+        return {"success": False, "error": "Erreur lors de l'annulation"}
+
+
 TOOL_HANDLERS = {
     "check_availability": handle_check_availability,
     "confirm_order": handle_confirm_order,
@@ -422,6 +494,9 @@ TOOL_HANDLERS = {
     "log_new_faq": handle_log_faq,
     "leave_message": handle_leave_message,
     "check_order_status": handle_check_order_status,
+    "cancel_order": handle_cancel_order,
+    "lookup_reservation": handle_lookup_reservation,
+    "cancel_reservation": handle_cancel_reservation,
 }
 
 

@@ -473,6 +473,24 @@ function buildSystemPrompt(
    - Si une heure estimee est disponible, l'annoncer.
    - Si aucune commande trouvee, dire poliment qu'aucune commande recente n'a ete trouvee pour ce numero.`);
     ruleNumber++;
+
+    rules.push(`${ruleNumber}. ANNULATION DE COMMANDE :
+   - NE PAS proposer cette option au debut de l'appel. Reagir uniquement si le client demande a annuler.
+   - D'abord appeler check_order_status pour retrouver la commande.
+   - Si la commande est en statut "pending" ou "confirmed" : confirmer avec le client puis appeler cancel_order.
+   - Si la commande est deja en "preparing", "ready", "delivering" ou "completed" : expliquer que l'annulation n'est plus possible a ce stade.
+   - TOUJOURS obtenir la confirmation explicite du client avant d'annuler.`);
+    ruleNumber++;
+  }
+
+  if (restaurant.reservationEnabled) {
+    rules.push(`${ruleNumber}. ANNULATION DE RESERVATION :
+   - NE PAS proposer cette option au debut de l'appel. Reagir uniquement si le client demande a annuler.
+   - Appeler lookup_reservation avec le numero de telephone pour retrouver la reservation.
+   - Annoncer les details (date, heure, nombre de personnes) pour confirmer avec le client.
+   - Obtenir la confirmation explicite du client avant d'annuler.
+   - Appeler cancel_reservation avec l'id de la reservation.`);
+    ruleNumber++;
   }
 
   rules.push(`${ruleNumber}. MESSAGES ET DEMANDES SPECIALES :
@@ -576,7 +594,7 @@ FONCTIONS DISPONIBLES
 ${restaurant.reservationEnabled ? "- confirm_reservation : reserver une table confirmee par le client. Inclure seating_preference et notes resumees.\n" : ""}- save_customer_info : sauvegarder prenom / adresse (appeler des que le client donne ces infos)
 - log_new_faq : remonter une question ABSENTE de la FAQ (dire au client "je n'ai pas cette info")
 - leave_message : laisser un message pour le restaurant (rappel, reclamation, demande speciale)
-${restaurant.orderStatusEnabled ? "- check_order_status : rechercher les commandes recentes du client par telephone (suivi de commande)\n" : ""}
+${restaurant.orderStatusEnabled ? "- check_order_status : rechercher les commandes recentes du client par telephone (suivi de commande)\n- cancel_order : annuler une commande (uniquement si pending ou confirmed, apres confirmation du client)\n" : ""}${restaurant.reservationEnabled ? "- lookup_reservation : rechercher les reservations du client par telephone\n- cancel_reservation : annuler une reservation (apres confirmation du client)\n" : ""}
 ========================================
 CONTROLES AVANT CLOTURE
 ========================================
@@ -836,7 +854,7 @@ function buildTools(restaurant: Restaurant): Tool[] {
     });
   }
 
-  // Ajouter check_order_status si activé
+  // Ajouter check_order_status + cancel_order si activé
   if (restaurant.orderStatusEnabled) {
     tools.push({
       type: "function",
@@ -852,6 +870,60 @@ function buildTools(restaurant: Restaurant): Tool[] {
           },
         },
         required: ["customer_phone"],
+      },
+    });
+
+    tools.push({
+      type: "function",
+      name: "cancel_order",
+      description:
+        "Annule une commande. Uniquement possible si la commande est en statut 'pending' ou 'confirmed'. Appeler UNIQUEMENT apres avoir retrouve la commande via check_order_status ET obtenu la confirmation explicite du client.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_number: {
+            type: "integer",
+            description: "Numero de la commande a annuler (retourne par check_order_status)",
+          },
+        },
+        required: ["order_number"],
+      },
+    });
+  }
+
+  // Ajouter lookup_reservation + cancel_reservation si réservations activées
+  if (restaurant.reservationEnabled) {
+    tools.push({
+      type: "function",
+      name: "lookup_reservation",
+      description:
+        "Recherche les reservations a venir du client par son numero de telephone. Utiliser quand le client veut annuler ou modifier une reservation.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_phone: {
+            type: "string",
+            description: "Numero de telephone du client (celui de l'appel en cours)",
+          },
+        },
+        required: ["customer_phone"],
+      },
+    });
+
+    tools.push({
+      type: "function",
+      name: "cancel_reservation",
+      description:
+        "Annule une reservation. Appeler UNIQUEMENT apres avoir retrouve la reservation via lookup_reservation ET obtenu la confirmation explicite du client.",
+      parameters: {
+        type: "object",
+        properties: {
+          reservation_id: {
+            type: "string",
+            description: "ID de la reservation a annuler (retourne par lookup_reservation)",
+          },
+        },
+        required: ["reservation_id"],
       },
     });
   }

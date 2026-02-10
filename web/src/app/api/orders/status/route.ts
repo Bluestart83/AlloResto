@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
 
   // Mapper en résumé lisible pour l'IA
   const summary = orders.map((o) => ({
+    id: o.id,
     orderNumber: o.orderNumber,
     status: o.status,
     orderType: o.orderType,
