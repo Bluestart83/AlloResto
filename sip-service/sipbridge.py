@@ -406,7 +406,8 @@ class SipBridge:
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
-            bridge.pjsip_shutdown()
+            # pjsip cleanup handled in run() finally block — NOT here
+            # (calling pjlib from asyncio thread triggers assertion failure)
 
         app = FastAPI(title="SIP Bridge", lifespan=lifespan)
 
@@ -569,6 +570,7 @@ class SipBridge:
 
         def signal_handler():
             stop_event.set()
+            server.should_exit = True
 
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
@@ -957,11 +959,17 @@ if HAS_PJSIP:
 
             def on_done(task):
                 if self._connected:
-                    try:
-                        prm = pj.CallOpParam()
-                        self.hangup(prm)
-                    except Exception:
-                        pass
+                    def _do_hangup():
+                        try:
+                            self.bridge._endpoint.libRegisterThread("hangup")
+                        except Exception:
+                            pass
+                        try:
+                            prm = pj.CallOpParam()
+                            self.hangup(prm)
+                        except Exception:
+                            pass
+                    self.bridge.loop.run_in_executor(self.bridge._executor, _do_hangup)
 
             self._task.add_done_callback(on_done)
 
