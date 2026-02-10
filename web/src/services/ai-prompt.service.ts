@@ -18,6 +18,7 @@
 import { getDb } from "@/lib/db";
 import { Restaurant } from "@/db/entities/Restaurant";
 import { PhoneLine } from "@/db/entities/PhoneLine";
+import { decryptSipPassword, isEncrypted } from "@/services/sip-encryption.service";
 import { MenuCategory } from "@/db/entities/MenuCategory";
 import { MenuItem } from "@/db/entities/MenuItem";
 import { Customer } from "@/db/entities/Customer";
@@ -854,10 +855,15 @@ async function resolveSipCredentials(
   });
 
   if (phoneLine?.sipDomain && phoneLine?.sipUsername && phoneLine?.sipPassword) {
+    const rawPassword = phoneLine.sipPassword;
+    const password = isEncrypted(rawPassword)
+      ? decryptSipPassword(rawPassword, phoneLine.id)
+      : rawPassword;
+
     return {
       domain: phoneLine.sipDomain,
       username: phoneLine.sipUsername,
-      password: phoneLine.sipPassword,
+      password,
       source: "client",
     };
   }

@@ -160,6 +160,10 @@ export class Restaurant {
   @Column({ name: "planning_config", type: "simple-json", default: "{}" })
   planningConfig!: Record<string, any>;
 
+  // --- Mode SIP ---
+  @Column({ name: "sip_bridge", type: "boolean", default: false })
+  sipBridge!: boolean;
+
   @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;
 

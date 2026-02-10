@@ -14,6 +14,7 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
   const baseItems = [
     { href: "/admin/customers", icon: "bi-people", label: "Clients" },
     { href: "/admin/import", icon: "bi-cloud-download", label: "Import resto" },
+    { href: "/admin/servers", icon: "bi-hdd-rack", label: "Serveurs Vocaux" },
   ];
 
   const restaurantItems = restaurantId
