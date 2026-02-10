@@ -1,0 +1,20 @@
+# ── main.py (mode Twilio) ──
+fastapi==0.115.*
+uvicorn==0.34.*
+websockets==13.*
+twilio==9.*
+python-dotenv==1.*
+httpx==0.28.*
+
+# ── main-sip.py (mode SIP direct) ──
+# Mêmes dépendances SAUF twilio, PLUS pjsua2 :
+#   pip install pjsua2    (ou compiler PJSIP depuis les sources)
+#
+# pjsua2 n'est PAS sur PyPI — il faut compiler PJSIP :
+#   sudo apt install build-essential python3-dev libasound2-dev
+#   git clone https://github.com/pjsip/pjproject.git
+#   cd pjproject
+#   ./configure --enable-shared CFLAGS="-fPIC"
+#   make dep && make
+#   cd pjsip-apps/src/swig/python
+#   python setup.py install

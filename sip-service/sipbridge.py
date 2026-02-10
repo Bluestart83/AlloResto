@@ -1,0 +1,1040 @@
+"""
+sipbridge.py — Bibliothèque SIP Bridge (Twilio-compatible)
+
+Pont SIP ↔ WebSocket générique. Expose le même protocole que Twilio Media
+Streams (events start/media/stop/clear/mark) et une API REST pour piloter
+les appels.
+
+La configuration est 100% externe (injectée via BridgeConfig).
+
+Usage :
+    from sipbridge import SipBridge, BridgeConfig, SipConfig, ...
+
+    config = BridgeConfig(
+        sip=SipConfig(domain="sip.example.com", username="user", password="pass"),
+        custom_params={"restaurantId": "pizza-napoli"},
+    )
+    bridge = SipBridge(config)
+    asyncio.run(bridge.run())
+"""
+
+import json
+import asyncio
+import base64
+import struct
+import uuid
+import signal
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Optional, Callable, Any
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+import httpx
+
+logger = logging.getLogger("sip-bridge")
+
+
+# ============================================================
+# CONFIGURATION — Dataclasses pures (pas d'os.getenv)
+# ============================================================
+
+@dataclass
+class SipConfig:
+    """Config SIP — credentials et enregistrement."""
+    domain: str = "sip.twilio.com"
+    username: str = ""
+    password: str = ""
+    port: int = 0               # 0 = auto
+    transport: str = "udp"      # udp | tcp | tls
+    reg_timeout: int = 300      # secondes
+
+
+@dataclass
+class NatConfig:
+    """Config NAT traversal — STUN / TURN / ICE."""
+    stun_server: str = ""
+    turn_server: str = ""
+    turn_username: str = ""
+    turn_password: str = ""
+    ice_enabled: bool = True
+
+
+@dataclass
+class AudioConfig:
+    """Config audio — codecs, qualité, traitement."""
+    codec_priority: list = field(default_factory=lambda: [
+        ("PCMU/8000", 255),
+        ("PCMA/8000", 254),
+        ("opus/48000", 0),
+        ("speex/16000", 0),
+        ("speex/8000", 0),
+        ("iLBC/8000", 0),
+        ("GSM/8000", 0),
+    ])
+    clock_rate: int = 8000
+    channel_count: int = 1
+    bits_per_sample: int = 16
+    frame_ms: int = 20
+    ec_enabled: bool = True
+    ec_tail_ms: int = 200
+    vad_enabled: bool = False
+    rx_gain: float = 0.0
+    tx_gain: float = 0.0
+
+    @property
+    def samples_per_frame(self) -> int:
+        return self.clock_rate * self.frame_ms // 1000
+
+    @property
+    def bytes_per_frame(self) -> int:
+        return self.samples_per_frame * (self.bits_per_sample // 8)
+
+
+@dataclass
+class CallbackConfig:
+    """Config des callbacks HTTP (status updates)."""
+    status_callback_url: str = ""
+    incoming_callback_url: str = ""
+    callback_method: str = "POST"
+    callback_timeout: float = 5.0
+    status_callback_events: list = field(default_factory=lambda: [
+        "initiated", "ringing", "answered", "completed",
+    ])
+
+
+@dataclass
+class BridgeConfig:
+    """Config globale du bridge SIP."""
+    sip: SipConfig = field(default_factory=SipConfig)
+    nat: NatConfig = field(default_factory=NatConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    callbacks: CallbackConfig = field(default_factory=CallbackConfig)
+    # WebSocket cible (le serveur qui traite l'audio, ex: OpenAI proxy)
+    ws_target: str = "ws://localhost:5050/media-stream"
+    # Port de l'API REST
+    api_port: int = 5060
+    # Paramètres custom passés dans chaque WebSocket "start" event
+    # (équivalent Twilio customParameters — clé-valeur libre)
+    custom_params: dict = field(default_factory=dict)
+    # Comportement
+    auto_answer: bool = True
+    max_call_duration: int = 600        # secondes, 0 = illimité
+    max_concurrent_calls: int = 10
+
+
+# ============================================================
+# µ-LAW CODEC
+# ============================================================
+
+try:
+    import audioop
+
+    def pcm16_to_ulaw(pcm: bytes) -> bytes:
+        return audioop.lin2ulaw(pcm, 2)
+
+    def ulaw_to_pcm16(data: bytes) -> bytes:
+        return audioop.ulaw2lin(data, 2)
+
+    logger.info("Codec µ-law : audioop (C natif)")
+
+except ImportError:
+    _BIAS = 0x84
+    _CLIP = 32635
+    _EXP_LUT = [0, 132, 396, 924, 1980, 4092, 8316, 16764]
+
+    def _enc(s: int) -> int:
+        sign = 0x80 if s < 0 else 0
+        s = min(abs(s), _CLIP) + _BIAS
+        exp = 7
+        for i in range(7, 0, -1):
+            if s >= (1 << (i + 3)):
+                exp = i
+                break
+        else:
+            exp = 0
+        return ~(sign | (exp << 4) | ((s >> (exp + 3)) & 0x0F)) & 0xFF
+
+    def _dec(b: int) -> int:
+        b = ~b & 0xFF
+        sign = b & 0x80
+        exp = (b >> 4) & 0x07
+        sample = _EXP_LUT[exp] + ((b & 0x0F) << (exp + 3))
+        return -sample if sign else sample
+
+    def pcm16_to_ulaw(pcm: bytes) -> bytes:
+        return bytes(_enc(s) for s in struct.unpack(f"<{len(pcm)//2}h", pcm))
+
+    def ulaw_to_pcm16(data: bytes) -> bytes:
+        return struct.pack(f"<{len(data)}h", *[_dec(b) for b in data])
+
+    logger.info("Codec µ-law : fallback Python pur")
+
+
+# ============================================================
+# PJSIP — Import conditionnel
+# ============================================================
+
+try:
+    import pjsua2 as pj
+    HAS_PJSIP = True
+except ImportError:
+    HAS_PJSIP = False
+    logger.error("pjsua2 non disponible ! Voir sip-service/README.md")
+
+try:
+    import websockets
+except ImportError:
+    raise ImportError("pip install websockets")
+
+
+# ============================================================
+# CALL STATUS
+# ============================================================
+
+class CallStatus(str, Enum):
+    INITIATED = "initiated"
+    RINGING = "ringing"
+    ANSWERED = "answered"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    BUSY = "busy"
+    NO_ANSWER = "no-answer"
+    CANCELLED = "cancelled"
+
+
+class CallDirection(str, Enum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+
+
+@dataclass
+class CallRecord:
+    """Suivi d'un appel (compatible Twilio)."""
+    sid: str
+    direction: CallDirection
+    from_number: str
+    to_number: str
+    status: CallStatus
+    created_at: str
+    custom_params: dict = field(default_factory=dict)
+    answered_at: Optional[str] = None
+    ended_at: Optional[str] = None
+    duration_sec: int = 0
+    ws_target: str = ""
+    callback_url: str = ""
+    _call_ref: Any = field(default=None, repr=False)
+
+    def to_dict(self) -> dict:
+        d = {
+            "sid": self.sid,
+            "direction": self.direction.value,
+            "from": self.from_number,
+            "to": self.to_number,
+            "status": self.status.value,
+            "createdAt": self.created_at,
+            "answeredAt": self.answered_at,
+            "endedAt": self.ended_at,
+            "durationSec": self.duration_sec,
+            "customParams": self.custom_params,
+        }
+        return d
+
+
+# ============================================================
+# SIP BRIDGE — Classe principale
+# ============================================================
+
+class SipBridge:
+    """
+    Bridge SIP ↔ WebSocket générique (compatible Twilio Media Streams).
+
+    Toute la configuration est injectée via BridgeConfig.
+    Aucune logique applicative (restaurant, etc.) — juste du transport.
+    """
+
+    def __init__(self, config: BridgeConfig):
+        self.config = config
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self._endpoint: Optional[Any] = None
+        self._account: Optional[Any] = None
+        self._executor = ThreadPoolExecutor(max_workers=2)
+        self.active_calls: dict[str, CallRecord] = {}
+        self.app = self._create_app()
+
+    # ── Callbacks HTTP ─────────────────────────────────────
+
+    async def fire_callback(self, call: CallRecord, event: str):
+        url = call.callback_url or self.config.callbacks.status_callback_url
+        if not url:
+            return
+        if event not in self.config.callbacks.status_callback_events:
+            return
+
+        payload = {
+            **call.to_dict(),
+            "event": event,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.config.callbacks.callback_timeout
+            ) as client:
+                if self.config.callbacks.callback_method.upper() == "GET":
+                    await client.get(url, params=payload)
+                else:
+                    await client.post(url, json=payload)
+            logger.debug(f"Callback {event} → {url}")
+        except Exception as e:
+            logger.warning(f"Callback {event} échoué ({url}): {e}")
+
+    async def fire_incoming_callback(self, caller: str, callee: str) -> dict:
+        url = self.config.callbacks.incoming_callback_url
+        if not url:
+            return {"action": "accept"}
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(url, json={
+                    "from": caller,
+                    "to": callee,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+                resp.raise_for_status()
+                return resp.json()
+        except Exception as e:
+            logger.warning(f"Incoming callback échoué ({url}): {e}")
+            return {"action": "accept"}
+
+    # ── PJSIP lifecycle ────────────────────────────────────
+
+    def pjsip_init(self):
+        if not HAS_PJSIP:
+            raise RuntimeError("pjsua2 non disponible")
+
+        cfg = self.config
+        self._endpoint = pj.Endpoint()
+        self._endpoint.libCreate()
+
+        ep_cfg = pj.EpConfig()
+        ep_cfg.logConfig.level = 3
+        ep_cfg.logConfig.consoleLevel = 3
+
+        if cfg.nat.stun_server:
+            ep_cfg.uaConfig.stunServer.append(cfg.nat.stun_server)
+        elif cfg.nat.turn_server:
+            ep_cfg.uaConfig.stunServer.append(cfg.nat.turn_server)
+
+        self._endpoint.libInit(ep_cfg)
+
+        tp_cfg = pj.TransportConfig()
+        tp_cfg.port = cfg.sip.port
+
+        if cfg.sip.transport == "tcp":
+            self._endpoint.transportCreate(pj.PJSIP_TRANSPORT_TCP, tp_cfg)
+        elif cfg.sip.transport == "tls":
+            self._endpoint.transportCreate(pj.PJSIP_TRANSPORT_TLS, tp_cfg)
+        else:
+            self._endpoint.transportCreate(pj.PJSIP_TRANSPORT_UDP, tp_cfg)
+
+        self._endpoint.libStart()
+
+        for codec, priority in cfg.audio.codec_priority:
+            try:
+                self._endpoint.codecSetPriority(codec, priority)
+            except Exception:
+                pass
+
+        mc = self._endpoint.audDevManager()
+        if cfg.audio.ec_enabled:
+            try:
+                mc.setEcOptions(cfg.audio.ec_tail_ms, 0)
+            except Exception:
+                pass
+
+        acc_cfg = pj.AccountConfig()
+        acc_cfg.idUri = f"sip:{cfg.sip.username}@{cfg.sip.domain}"
+        acc_cfg.regConfig.registrarUri = f"sip:{cfg.sip.domain}"
+        acc_cfg.regConfig.timeoutSec = cfg.sip.reg_timeout
+
+        cred = pj.AuthCredInfo()
+        cred.scheme = "digest"
+        cred.realm = "*"
+        cred.username = cfg.sip.username
+        cred.data = cfg.sip.password
+        cred.dataType = 0
+        acc_cfg.sipConfig.authCreds.append(cred)
+
+        acc_cfg.natConfig.iceEnabled = cfg.nat.ice_enabled
+        if cfg.nat.turn_server:
+            acc_cfg.natConfig.turnEnabled = True
+            acc_cfg.natConfig.turnServer = cfg.nat.turn_server
+            acc_cfg.natConfig.turnUserName = cfg.nat.turn_username
+            acc_cfg.natConfig.turnPassword = cfg.nat.turn_password
+            acc_cfg.natConfig.turnConnType = pj.PJ_TURN_TP_UDP
+
+        self._account = _SipAccountHandler(self)
+        self._account.create(acc_cfg)
+        logger.info(f"SIP enregistré: {cfg.sip.username}@{cfg.sip.domain}")
+
+    def pjsip_shutdown(self):
+        if self._endpoint:
+            self._endpoint.libDestroy()
+            self._endpoint = None
+            logger.info("PJSIP arrêté")
+
+    def pjsip_poll(self):
+        if self._endpoint:
+            self._endpoint.libHandleEvents(10)
+
+    # ── FastAPI ────────────────────────────────────────────
+
+    def _create_app(self) -> FastAPI:
+        bridge = self
+
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            yield
+            bridge.pjsip_shutdown()
+
+        app = FastAPI(title="SIP Bridge", lifespan=lifespan)
+
+        @app.get("/health")
+        async def health():
+            reg_active = False
+            if bridge._account:
+                try:
+                    reg_active = bridge._account.getInfo().regIsActive
+                except Exception:
+                    pass
+
+            return {
+                "status": "ok",
+                "sip_registered": reg_active,
+                "sip_account": f"{bridge.config.sip.username}@{bridge.config.sip.domain}",
+                "ws_target": bridge.config.ws_target,
+                "active_calls": len([
+                    r for r in bridge.active_calls.values()
+                    if r.status in (CallStatus.ACTIVE, CallStatus.ANSWERED, CallStatus.RINGING)
+                ]),
+                "max_concurrent_calls": bridge.config.max_concurrent_calls,
+                "audio": {
+                    "codec": bridge.config.audio.codec_priority[0][0],
+                    "clock_rate": bridge.config.audio.clock_rate,
+                    "frame_ms": bridge.config.audio.frame_ms,
+                    "ec_enabled": bridge.config.audio.ec_enabled,
+                    "vad_enabled": bridge.config.audio.vad_enabled,
+                },
+            }
+
+        @app.get("/api/calls")
+        async def list_calls():
+            return [r.to_dict() for r in bridge.active_calls.values()]
+
+        @app.post("/api/calls")
+        async def make_call(req: _MakeCallRequest):
+            if not HAS_PJSIP or not bridge._account:
+                raise HTTPException(503, "PJSIP non initialisé")
+
+            active_count = sum(
+                1 for r in bridge.active_calls.values()
+                if r.status in (CallStatus.ACTIVE, CallStatus.ANSWERED, CallStatus.RINGING)
+            )
+            if active_count >= bridge.config.max_concurrent_calls:
+                raise HTTPException(429, f"Max appels simultanés atteint ({bridge.config.max_concurrent_calls})")
+
+            to_uri = req.to
+            if not to_uri.startswith("sip:"):
+                to_uri = f"sip:{req.to}@{bridge.config.sip.domain}"
+
+            # Merge : config defaults + per-call override
+            merged_params = {**bridge.config.custom_params, **(req.custom_params or {})}
+
+            def do_call():
+                call = _SipCallHandler(
+                    bridge,
+                    bridge._account,
+                    direction=CallDirection.OUTBOUND,
+                    custom_params=merged_params,
+                    ws_target=req.ws_target,
+                    callback_url=req.callback_url,
+                    to_number=req.to,
+                )
+
+                record = CallRecord(
+                    sid=call.call_sid,
+                    direction=CallDirection.OUTBOUND,
+                    from_number=req.from_number or bridge.config.sip.username,
+                    to_number=req.to,
+                    status=CallStatus.INITIATED,
+                    custom_params=merged_params,
+                    created_at=datetime.now(timezone.utc).isoformat(),
+                    ws_target=req.ws_target or bridge.config.ws_target,
+                    callback_url=req.callback_url,
+                    _call_ref=call,
+                )
+                bridge.active_calls[call.call_sid] = record
+
+                prm = pj.CallOpParam()
+                prm.opt.audioCount = 1
+                prm.opt.videoCount = 0
+                call.makeCall(to_uri, prm)
+
+                return record.to_dict()
+
+            try:
+                result = await bridge.loop.run_in_executor(bridge._executor, do_call)
+                record = bridge.active_calls.get(result["sid"])
+                if record:
+                    await bridge.fire_callback(record, "initiated")
+                return JSONResponse(result, status_code=201)
+            except Exception as e:
+                logger.error(f"Erreur appel sortant: {e}")
+                raise HTTPException(500, str(e))
+
+        @app.delete("/api/calls/{call_sid}")
+        async def hangup_call(call_sid: str):
+            record = bridge.active_calls.get(call_sid)
+            if not record:
+                raise HTTPException(404, "Appel non trouvé")
+
+            call_ref = record._call_ref
+            if call_ref and record.status not in (CallStatus.COMPLETED, CallStatus.FAILED):
+                def do_hangup():
+                    try:
+                        prm = pj.CallOpParam()
+                        prm.statusCode = 200
+                        call_ref.hangup(prm)
+                    except Exception as e:
+                        logger.error(f"Erreur hangup: {e}")
+
+                await bridge.loop.run_in_executor(bridge._executor, do_hangup)
+                record.status = CallStatus.CANCELLED
+                return {"status": "cancelled", "sid": call_sid}
+
+            return {"status": record.status.value, "sid": call_sid}
+
+        return app
+
+    # ── Run ────────────────────────────────────────────────
+
+    async def run(self):
+        self.loop = asyncio.get_event_loop()
+
+        # Init PJSIP
+        await self.loop.run_in_executor(self._executor, self.pjsip_init)
+
+        # Banner
+        cfg = self.config
+        logger.info("=" * 65)
+        logger.info("  SIP Bridge (Twilio-compatible)")
+        logger.info("=" * 65)
+        logger.info(f"  SIP       : {cfg.sip.username}@{cfg.sip.domain}")
+        logger.info(f"  Transport : {cfg.sip.transport.upper()}")
+        logger.info(f"  WS target : {cfg.ws_target}")
+        logger.info(f"  API REST  : http://0.0.0.0:{cfg.api_port}")
+        logger.info(f"  Codec     : {cfg.audio.codec_priority[0][0]}")
+        logger.info(f"  EC        : {'ON' if cfg.audio.ec_enabled else 'OFF'} ({cfg.audio.ec_tail_ms}ms)")
+        logger.info(f"  Max calls : {cfg.max_concurrent_calls}")
+        if cfg.custom_params:
+            logger.info(f"  Params    : {cfg.custom_params}")
+        if cfg.nat.turn_server:
+            logger.info(f"  TURN      : {cfg.nat.turn_server}")
+        if cfg.callbacks.status_callback_url:
+            logger.info(f"  Status CB : {cfg.callbacks.status_callback_url}")
+        if cfg.callbacks.incoming_callback_url:
+            logger.info(f"  Incoming CB: {cfg.callbacks.incoming_callback_url}")
+        logger.info("=" * 65)
+
+        import uvicorn
+
+        uvi_config = uvicorn.Config(
+            self.app, host="0.0.0.0", port=cfg.api_port,
+            log_level="info", access_log=False,
+        )
+        server = uvicorn.Server(uvi_config)
+
+        stop_event = asyncio.Event()
+
+        def signal_handler():
+            stop_event.set()
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                self.loop.add_signal_handler(sig, signal_handler)
+            except NotImplementedError:
+                pass
+
+        async def pjsip_poll_loop():
+            while not stop_event.is_set():
+                await self.loop.run_in_executor(self._executor, self.pjsip_poll)
+                await asyncio.sleep(0.005)
+
+        async def api_server():
+            await server.serve()
+
+        try:
+            await asyncio.gather(pjsip_poll_loop(), api_server())
+        except asyncio.CancelledError:
+            pass
+        finally:
+            for sid, record in list(self.active_calls.items()):
+                call_ref = record._call_ref
+                if call_ref:
+                    try:
+                        prm = pj.CallOpParam()
+                        call_ref.hangup(prm)
+                    except Exception:
+                        pass
+            self.active_calls.clear()
+            await self.loop.run_in_executor(self._executor, self.pjsip_shutdown)
+            self._executor.shutdown(wait=False)
+            logger.info("Bye.")
+
+
+# ============================================================
+# CLASSES INTERNES
+# ============================================================
+
+class _MakeCallRequest(BaseModel):
+    """Requête POST /api/calls — initier un appel sortant."""
+    to: str = Field(..., description="Numéro ou SIP URI à appeler")
+    from_number: str = Field("", alias="from", description="Caller ID")
+    custom_params: Optional[dict] = Field(None, alias="customParams", description="Paramètres custom (merge avec defaults)")
+    ws_target: str = Field("", alias="wsTarget", description="WebSocket cible (override)")
+    callback_url: str = Field("", alias="callbackUrl", description="URL de callback status")
+    timeout_sec: int = Field(30, description="Timeout sonnerie en secondes")
+    model_config = {"populate_by_name": True}
+
+
+class _WsSession:
+    """Bridge audio entre un appel SIP et le WebSocket (protocole Twilio Media Streams)."""
+
+    def __init__(
+        self,
+        bridge: SipBridge,
+        call_sid: str,
+        caller_phone: str,
+        callee_phone: str,
+        direction: CallDirection,
+        custom_params: dict,
+        ws_target: str,
+        audio_cfg: AudioConfig,
+    ):
+        self.bridge = bridge
+        self.call_sid = call_sid
+        self.caller_phone = caller_phone
+        self.callee_phone = callee_phone
+        self.direction = direction
+        self.custom_params = custom_params
+        self.ws_target = ws_target
+        self.audio_cfg = audio_cfg
+        self.audio_port: Optional[Any] = None
+        self._alive = True
+        self._tag = call_sid[:8]
+
+    async def run(self, audio_port):
+        self.audio_port = audio_port
+        logger.info(f"[{self._tag}] WS session → {self.ws_target}")
+
+        try:
+            async with websockets.connect(self.ws_target) as ws:
+                # Event "start" — identique Twilio Media Streams
+                await ws.send(json.dumps({
+                    "event": "start",
+                    "start": {
+                        "streamSid": self.call_sid,
+                        "accountSid": "PJSIP-LOCAL",
+                        "callSid": self.call_sid,
+                        "customParameters": {
+                            "callerPhone": self.caller_phone,
+                            "direction": self.direction.value,
+                            "to": self.callee_phone,
+                            **self.custom_params,
+                        },
+                    },
+                }))
+
+                await asyncio.gather(
+                    self._sip_to_ws(ws),
+                    self._ws_to_sip(ws),
+                    self._watchdog(),
+                )
+
+        except websockets.exceptions.ConnectionClosedError as e:
+            logger.info(f"[{self._tag}] WS fermé: {e}")
+        except ConnectionRefusedError:
+            logger.error(f"[{self._tag}] Connexion refusée: {self.ws_target}")
+        except Exception as e:
+            logger.error(f"[{self._tag}] Erreur session: {e}")
+        finally:
+            self._alive = False
+            try:
+                async with websockets.connect(self.ws_target):
+                    pass
+            except Exception:
+                pass
+            logger.info(f"[{self._tag}] Session terminée")
+
+    async def _watchdog(self):
+        max_dur = self.bridge.config.max_call_duration
+        if max_dur <= 0:
+            while self._alive:
+                await asyncio.sleep(5)
+            return
+        await asyncio.sleep(max_dur)
+        if self._alive:
+            logger.info(f"[{self._tag}] Durée max ({max_dur}s) atteinte → fin")
+            self._alive = False
+
+    async def _sip_to_ws(self, ws):
+        queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=200)
+        loop = asyncio.get_event_loop()
+
+        def on_frame(pcm: bytes):
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, pcm)
+            except asyncio.QueueFull:
+                pass
+
+        self.audio_port.set_capture_callback(on_frame)
+        ts_ms = 0
+
+        try:
+            while self._alive:
+                try:
+                    pcm = await asyncio.wait_for(queue.get(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    continue
+
+                ulaw = pcm16_to_ulaw(pcm)
+                payload = base64.b64encode(ulaw).decode("ascii")
+                await ws.send(json.dumps({
+                    "event": "media",
+                    "media": {"payload": payload, "timestamp": ts_ms},
+                }))
+                ts_ms += self.audio_cfg.frame_ms
+        except Exception as e:
+            if self._alive:
+                logger.error(f"[{self._tag}] sip→ws: {e}")
+        finally:
+            try:
+                await ws.send(json.dumps({"event": "stop"}))
+            except Exception:
+                pass
+
+    async def _ws_to_sip(self, ws):
+        try:
+            async for raw in ws:
+                data = json.loads(raw)
+                event = data.get("event", "")
+
+                if event == "media":
+                    payload = data.get("media", {}).get("payload", "")
+                    if payload and self.audio_port:
+                        ulaw = base64.b64decode(payload)
+                        pcm = ulaw_to_pcm16(ulaw)
+                        self.audio_port.feed_audio(pcm)
+
+                elif event == "clear":
+                    if self.audio_port:
+                        self.audio_port.clear_audio()
+
+                elif event == "mark":
+                    pass
+
+        except websockets.exceptions.ConnectionClosed:
+            pass
+        except Exception as e:
+            if self._alive:
+                logger.error(f"[{self._tag}] ws→sip: {e}")
+        finally:
+            self._alive = False
+
+    def stop(self):
+        self._alive = False
+
+
+# ── PJSIP handlers (conditionnels) ────────────────────────
+
+if HAS_PJSIP:
+
+    class _AudioPort(pj.AudioMediaPort):
+        def __init__(self, call_sid: str, audio_cfg: AudioConfig):
+            super().__init__()
+            self.call_sid = call_sid
+            self.audio_cfg = audio_cfg
+            self._on_capture: Optional[Callable[[bytes], None]] = None
+            self._play_buf = bytearray()
+            import threading
+            self._lock = threading.Lock()
+
+        def set_capture_callback(self, fn: Callable[[bytes], None]):
+            self._on_capture = fn
+
+        def feed_audio(self, pcm: bytes):
+            with self._lock:
+                self._play_buf.extend(pcm)
+
+        def clear_audio(self):
+            with self._lock:
+                self._play_buf.clear()
+
+        def onFrameReceived(self, frame):
+            if frame.type == pj.PJMEDIA_FRAME_TYPE_AUDIO and self._on_capture:
+                try:
+                    self._on_capture(bytes(frame.buf[:frame.size]))
+                except Exception:
+                    pass
+
+        def onFrameRequested(self, frame):
+            bpf = self.audio_cfg.bytes_per_frame
+            with self._lock:
+                if len(self._play_buf) >= bpf:
+                    chunk = bytes(self._play_buf[:bpf])
+                    del self._play_buf[:bpf]
+                    frame.buf = chunk
+                    frame.size = bpf
+                else:
+                    frame.buf = b"\x00" * bpf
+                    frame.size = bpf
+                frame.type = pj.PJMEDIA_FRAME_TYPE_AUDIO
+
+
+    class _SipCallHandler(pj.Call):
+
+        def __init__(self, bridge: SipBridge, account,
+                     direction: CallDirection,
+                     custom_params: dict = None,
+                     ws_target: str = "",
+                     callback_url: str = "", to_number: str = "",
+                     call_id=pj.PJSUA_INVALID_ID):
+            super().__init__(account, call_id)
+            self.bridge = bridge
+            self.call_sid = str(uuid.uuid4())
+            self.direction = direction
+            self.custom_params = custom_params or dict(bridge.config.custom_params)
+            self.ws_target = ws_target or bridge.config.ws_target
+            self.callback_url = callback_url
+            self.to_number = to_number
+            self.audio_port: Optional[_AudioPort] = None
+            self.session: Optional[_WsSession] = None
+            self._task: Optional[asyncio.Task] = None
+            self._connected = False
+
+        def onCallState(self, prm):
+            ci = self.getInfo()
+            logger.info(f"[{self.call_sid[:8]}] State: {ci.stateText}")
+
+            status_map = {
+                pj.PJSIP_INV_STATE_CALLING: CallStatus.INITIATED,
+                pj.PJSIP_INV_STATE_INCOMING: CallStatus.RINGING,
+                pj.PJSIP_INV_STATE_EARLY: CallStatus.RINGING,
+                pj.PJSIP_INV_STATE_CONNECTING: CallStatus.ANSWERED,
+                pj.PJSIP_INV_STATE_CONFIRMED: CallStatus.ACTIVE,
+            }
+
+            record = self.bridge.active_calls.get(self.call_sid)
+
+            if ci.state == pj.PJSIP_INV_STATE_DISCONNECTED:
+                self._connected = False
+
+                final_status = CallStatus.COMPLETED
+                sip_code = ci.lastStatusCode
+                if sip_code == 486 or sip_code == 600:
+                    final_status = CallStatus.BUSY
+                elif sip_code == 408 or sip_code == 480:
+                    final_status = CallStatus.NO_ANSWER
+                elif sip_code >= 400:
+                    final_status = CallStatus.FAILED
+
+                if record:
+                    now = datetime.now(timezone.utc)
+                    record.status = final_status
+                    record.ended_at = now.isoformat()
+                    if record.answered_at:
+                        answered = datetime.fromisoformat(record.answered_at)
+                        record.duration_sec = int((now - answered).total_seconds())
+                    self.bridge.loop.call_soon_threadsafe(
+                        lambda: asyncio.ensure_future(
+                            self.bridge.fire_callback(record, "completed")
+                        )
+                    )
+                    self.bridge.loop.call_soon_threadsafe(
+                        lambda sid=self.call_sid: asyncio.get_event_loop().call_later(
+                            30, lambda: self.bridge.active_calls.pop(sid, None)
+                        )
+                    )
+
+                if self._task and not self._task.done():
+                    self.bridge.loop.call_soon_threadsafe(self._task.cancel)
+
+            elif ci.state in status_map and record:
+                new_status = status_map[ci.state]
+                if record.status != new_status:
+                    record.status = new_status
+                    if new_status in (CallStatus.ANSWERED, CallStatus.ACTIVE):
+                        record.answered_at = datetime.now(timezone.utc).isoformat()
+                    self.bridge.loop.call_soon_threadsafe(
+                        lambda evt=new_status.value: asyncio.ensure_future(
+                            self.bridge.fire_callback(record, evt)
+                        )
+                    )
+
+        def onCallMediaState(self, prm):
+            ci = self.getInfo()
+            for idx, mi in enumerate(ci.media):
+                if (
+                    mi.type == pj.PJMEDIA_TYPE_AUDIO
+                    and mi.status == pj.PJSUA_CALL_MEDIA_ACTIVE
+                ):
+                    aud_med = self.getAudioMedia(idx)
+
+                    audio_cfg = self.bridge.config.audio
+                    self.audio_port = _AudioPort(self.call_sid, audio_cfg)
+                    fmt = pj.MediaFormatAudio()
+                    fmt.clockRate = audio_cfg.clock_rate
+                    fmt.channelCount = audio_cfg.channel_count
+                    fmt.bitsPerSample = audio_cfg.bits_per_sample
+                    fmt.frameTimeUsec = audio_cfg.frame_ms * 1000
+                    self.audio_port.createPort("bridge", fmt)
+
+                    aud_med.startTransmit(self.audio_port)
+                    self.audio_port.startTransmit(aud_med)
+                    self._connected = True
+
+                    caller = self._parse_caller(ci.remoteUri)
+                    callee = self._parse_caller(ci.localUri)
+                    logger.info(f"[{self.call_sid[:8]}] Audio actif — {caller} → {callee}")
+
+                    self.session = _WsSession(
+                        bridge=self.bridge,
+                        call_sid=self.call_sid,
+                        caller_phone=caller,
+                        callee_phone=self.to_number or callee,
+                        direction=self.direction,
+                        custom_params=self.custom_params,
+                        ws_target=self.ws_target,
+                        audio_cfg=audio_cfg,
+                    )
+                    self.bridge.loop.call_soon_threadsafe(self._start_session)
+                    break
+
+        def _start_session(self):
+            self._task = asyncio.ensure_future(
+                self.session.run(self.audio_port)
+            )
+
+            def on_done(task):
+                if self._connected:
+                    try:
+                        prm = pj.CallOpParam()
+                        self.hangup(prm)
+                    except Exception:
+                        pass
+
+            self._task.add_done_callback(on_done)
+
+        @staticmethod
+        def _parse_caller(sip_uri: str) -> str:
+            try:
+                clean = sip_uri.replace("<", "").replace(">", "").replace('"', "")
+                if "sip:" in clean:
+                    return clean.split("sip:")[1].split("@")[0]
+            except Exception:
+                pass
+            return sip_uri
+
+
+    class _SipAccountHandler(pj.Account):
+
+        def __init__(self, bridge: SipBridge):
+            super().__init__()
+            self.bridge = bridge
+
+        def onIncomingCall(self, prm):
+            call = _SipCallHandler(self.bridge, self, CallDirection.INBOUND, call_id=prm.callId)
+            ci = call.getInfo()
+            caller = _SipCallHandler._parse_caller(ci.remoteUri)
+            callee = _SipCallHandler._parse_caller(ci.localUri)
+            logger.info(f"Appel entrant: {caller} → {callee}")
+
+            active_count = sum(
+                1 for r in self.bridge.active_calls.values()
+                if r.status in (CallStatus.ACTIVE, CallStatus.ANSWERED, CallStatus.RINGING)
+            )
+            if active_count >= self.bridge.config.max_concurrent_calls:
+                logger.warning(f"Max appels atteint ({active_count}) → rejeter")
+                reject = pj.CallOpParam()
+                reject.statusCode = 486
+                call.hangup(reject)
+                return
+
+            record = CallRecord(
+                sid=call.call_sid,
+                direction=CallDirection.INBOUND,
+                from_number=caller,
+                to_number=callee,
+                status=CallStatus.RINGING,
+                custom_params=dict(self.bridge.config.custom_params),
+                created_at=datetime.now(timezone.utc).isoformat(),
+                ws_target=self.bridge.config.ws_target,
+                callback_url="",
+                _call_ref=call,
+            )
+            self.bridge.active_calls[call.call_sid] = record
+
+            bridge = self.bridge
+
+            async def handle_incoming():
+                decision = await bridge.fire_incoming_callback(caller, callee)
+                action = decision.get("action", "accept")
+
+                if action == "reject":
+                    logger.info(f"[{call.call_sid[:8]}] Rejeté par callback")
+                    record.status = CallStatus.FAILED
+                    try:
+                        reject = pj.CallOpParam()
+                        reject.statusCode = int(decision.get("statusCode", 486))
+                        call.hangup(reject)
+                    except Exception:
+                        pass
+                    return
+
+                if action == "ignore":
+                    logger.info(f"[{call.call_sid[:8]}] Ignoré par callback")
+                    return
+
+                # Le callback peut override les custom params
+                if decision.get("customParams") and isinstance(decision["customParams"], dict):
+                    call.custom_params.update(decision["customParams"])
+                    record.custom_params.update(decision["customParams"])
+                if decision.get("wsTarget"):
+                    call.ws_target = decision["wsTarget"]
+                    record.ws_target = decision["wsTarget"]
+                if decision.get("callbackUrl"):
+                    call.callback_url = decision["callbackUrl"]
+                    record.callback_url = decision["callbackUrl"]
+
+                await bridge.fire_callback(record, "ringing")
+
+            self.bridge.loop.call_soon_threadsafe(
+                lambda: asyncio.ensure_future(handle_incoming())
+            )
+
+            if self.bridge.config.auto_answer:
+                answer = pj.CallOpParam()
+                answer.statusCode = 200
+                call.answer(answer)
+
+        def onRegState(self, prm):
+            ai = self.getInfo()
+            status = "OK" if ai.regIsActive else "ÉCHEC"
+            logger.info(f"SIP Registration: {status} (code {ai.regStatus})")
