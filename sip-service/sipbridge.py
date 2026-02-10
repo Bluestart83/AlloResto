@@ -602,7 +602,10 @@ class SipBridge:
                     pass
                 for sid, record in list(self.active_calls.items()):
                     call_ref = record._call_ref
-                    if call_ref:
+                    if call_ref and record.status not in (
+                        CallStatus.COMPLETED, CallStatus.FAILED,
+                        CallStatus.CANCELLED,
+                    ):
                         try:
                             prm = pj.CallOpParam()
                             call_ref.hangup(prm)
@@ -702,7 +705,14 @@ class _WsSession:
             self._alive = False
             # Raccrocher l'appel SIP quand la session WS se termine
             record = self.bridge.active_calls.get(self.call_sid)
-            if record and record._call_ref:
+            call_still_active = (
+                record and record._call_ref
+                and record.status not in (
+                    CallStatus.COMPLETED, CallStatus.FAILED,
+                    CallStatus.CANCELLED,
+                )
+            )
+            if call_still_active:
                 logger.info(f"[{self._tag}] WS session ended — sending SIP BYE (hangup)")
                 def _hangup_sip():
                     try:
@@ -727,14 +737,14 @@ class _WsSession:
 
     async def _watchdog(self):
         max_dur = self.bridge.config.max_call_duration
-        if max_dur <= 0:
-            while self._alive:
-                await asyncio.sleep(5)
-            return
-        await asyncio.sleep(max_dur)
-        if self._alive:
-            logger.info(f"[{self._tag}] Durée max ({max_dur}s) atteinte → fin")
-            self._alive = False
+        elapsed = 0
+        while self._alive:
+            await asyncio.sleep(1)
+            elapsed += 1
+            if max_dur > 0 and elapsed >= max_dur:
+                logger.info(f"[{self._tag}] Durée max ({max_dur}s) atteinte → fin")
+                self._alive = False
+                break
 
     async def _sip_to_ws(self, ws):
         ts_ms = 0
