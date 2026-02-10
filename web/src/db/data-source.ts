@@ -15,6 +15,11 @@ import { DiningTable } from "./entities/DiningTable";
 import { Message } from "./entities/Message";
 import { BlockedPhone } from "./entities/BlockedPhone";
 import { ExternalLoad } from "./entities/ExternalLoad";
+import { SyncPlatformConfig } from "./entities/SyncPlatformConfig";
+import { SyncExternalMapping } from "./entities/SyncExternalMapping";
+import { SyncLog } from "./entities/SyncLog";
+import { Service } from "./entities/Service";
+import { Offer } from "./entities/Offer";
 
 const entities = [
   Restaurant,
@@ -32,6 +37,11 @@ const entities = [
   Message,
   BlockedPhone,
   ExternalLoad,
+  SyncPlatformConfig,
+  SyncExternalMapping,
+  SyncLog,
+  Service,
+  Offer,
 ];
 
 // ============================================================

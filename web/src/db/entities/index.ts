@@ -8,3 +8,8 @@ export { Order, type OrderStatus, type OrderType, type PaymentMethod } from "./O
 export { OrderItem } from "./OrderItem";
 export { Faq } from "./Faq";
 export { ExternalLoad } from "./ExternalLoad";
+export { SyncPlatformConfig } from "./SyncPlatformConfig";
+export { SyncExternalMapping } from "./SyncExternalMapping";
+export { SyncLog, type SyncDirection, type SyncAction, type SyncStatus } from "./SyncLog";
+export { Service } from "./Service";
+export { Offer } from "./Offer";

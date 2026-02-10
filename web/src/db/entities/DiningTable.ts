@@ -35,6 +35,15 @@ export class DiningTable {
   @Column({ type: "int" })
   seats!: number;
 
+  @Column({ name: "min_seats", type: "int", default: 1 })
+  minSeats!: number;
+
+  @Column({ name: "max_seats", type: "int", nullable: true })
+  maxSeats!: number | null;
+
+  @Column({ name: "is_combinable", type: "boolean", default: false })
+  isCombinable!: boolean;
+
   @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;
 

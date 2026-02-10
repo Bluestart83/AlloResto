@@ -19,6 +19,9 @@ import type { DiningRoom } from "./DiningRoom";
 import type { DiningTable } from "./DiningTable";
 import type { Message } from "./Message";
 import type { ExternalLoad } from "./ExternalLoad";
+import type { SyncPlatformConfig } from "./SyncPlatformConfig";
+import type { Service } from "./Service";
+import type { Offer } from "./Offer";
 
 @Entity("restaurants")
 export class Restaurant {
@@ -174,6 +177,25 @@ export class Restaurant {
   @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;
 
+  // --- Config sync plateformes ---
+  @Column({ type: "varchar", length: 50, default: "Europe/Paris" })
+  timezone!: string;
+
+  @Column({ type: "varchar", length: 3, default: "EUR" })
+  currency!: string;
+
+  @Column({ name: "default_locale", type: "varchar", length: 5, default: "fr" })
+  defaultLocale!: string;
+
+  @Column({ name: "cancellation_delay_hours", type: "int", default: 2 })
+  cancellationDelayHours!: number;
+
+  @Column({ name: "auto_confirm_reservation", type: "boolean", default: true })
+  autoConfirmReservation!: boolean;
+
+  @Column({ name: "reminder_hours_before", type: "int", default: 24 })
+  reminderHoursBefore!: number;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 
@@ -216,4 +238,13 @@ export class Restaurant {
 
   @OneToMany("ExternalLoad", "restaurant")
   externalLoads!: ExternalLoad[];
+
+  @OneToMany("SyncPlatformConfig", "restaurant")
+  syncPlatformConfigs!: SyncPlatformConfig[];
+
+  @OneToMany("Service", "restaurant")
+  services!: Service[];
+
+  @OneToMany("Offer", "restaurant")
+  offers!: Offer[];
 }

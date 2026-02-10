@@ -672,7 +672,7 @@ async def media_stream(websocket: WebSocket):
     response_start_timestamp_twilio = None
 
     # Connexion à OpenAI Realtime API
-    openai_ws_url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+    openai_ws_url = "wss://api.openai.com/v1/realtime?model=gpt-realtime" # gpt-4o-realtime-preview
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "OpenAI-Beta": "realtime=v1",

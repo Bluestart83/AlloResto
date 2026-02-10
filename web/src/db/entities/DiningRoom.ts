@@ -32,6 +32,13 @@ export class DiningRoom {
   @Column({ name: "display_order", type: "int", default: 0 })
   displayOrder!: number;
 
+  // --- Sync plateformes ---
+  @Column({ type: "varchar", length: 30, nullable: true })
+  type!: string | null;
+
+  @Column({ type: "int", nullable: true })
+  capacity!: number | null;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 

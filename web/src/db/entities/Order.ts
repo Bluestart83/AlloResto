@@ -107,6 +107,16 @@ export class Order {
   @Column({ type: "text", nullable: true })
   notes!: string | null;
 
+  // --- Source & sync ---
+  @Column({ type: "varchar", length: 50, default: "phone_ai" })
+  source!: string;
+
+  @Column({ name: "external_id", type: "varchar", length: 255, nullable: true })
+  externalId!: string | null;
+
+  @Column({ name: "external_raw_data", type: "simple-json", nullable: true })
+  externalRawData!: Record<string, any> | null;
+
   // --- Planning fields ---
   @Column({ name: "order_size", type: "varchar", length: 1, nullable: true })
   orderSize!: "S" | "M" | "L" | null;
