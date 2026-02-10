@@ -47,7 +47,13 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORT = int(os.getenv("PORT", 5050))
 NEXT_API_URL = os.getenv("NEXT_API_URL", "http://localhost:3000")
 RESTAURANT_ID = os.getenv("RESTAURANT_ID", "")
+MAX_CALL_DURATION = int(os.getenv("MAX_CALL_DURATION", "600"))  # 10 min par défaut
 HANGUP_DELAY_S = 0.3  # délai avant envoi du stop après end_call (buffer réseau)
+
+# VAD (Voice Activity Detection) — OpenAI Realtime turn detection
+VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", "0.5"))          # 0.0-1.0 sensibilité
+VAD_SILENCE_MS = int(os.getenv("VAD_SILENCE_MS", "500"))          # ms de silence avant fin de tour
+VAD_PREFIX_PADDING_MS = int(os.getenv("VAD_PREFIX_PADDING_MS", "300"))  # ms d'audio avant la parole détectée
 
 # Événements OpenAI à logger (pour debug)
 LOG_EVENT_TYPES = [
@@ -581,7 +587,12 @@ async def media_stream(websocket: WebSocket):
             session_update = {
                 "type": "session.update",
                 "session": {
-                    "turn_detection": {"type": "server_vad"},
+                    "turn_detection": {
+                        "type": "server_vad",
+                        "threshold": VAD_THRESHOLD,
+                        "silence_duration_ms": VAD_SILENCE_MS,
+                        "prefix_padding_ms": VAD_PREFIX_PADDING_MS,
+                    },
                     "input_audio_format": "g711_ulaw",
                     "output_audio_format": "g711_ulaw",
                     "voice": ai_config.get("voice", "sage"),
@@ -800,8 +811,26 @@ async def media_stream(websocket: WebSocket):
             except Exception as e:
                 logger.error(f"Erreur OpenAI: {e}")
 
-        # Lancer les deux tâches en parallèle
-        await asyncio.gather(receive_from_twilio(), send_to_twilio())
+        # Watchdog durée max d'appel
+        async def call_duration_watchdog():
+            if MAX_CALL_DURATION <= 0:
+                return
+            await asyncio.sleep(MAX_CALL_DURATION)
+            logger.warning(f"Durée max atteinte ({MAX_CALL_DURATION}s), fermeture de l'appel")
+            await finalize_call(ctx)
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+
+        # Lancer les tâches en parallèle (le watchdog s'arrête quand les autres finissent)
+        tasks = [receive_from_twilio(), send_to_twilio(), call_duration_watchdog()]
+        done, pending = await asyncio.wait(
+            [asyncio.create_task(t) for t in tasks],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
 
 
 # ============================================================

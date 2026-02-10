@@ -161,6 +161,9 @@ export class Restaurant {
   planningConfig!: Record<string, any>;
 
   // --- Mode SIP ---
+  @Column({ name: "sip_enabled", type: "boolean", default: false })
+  sipEnabled!: boolean;
+
   @Column({ name: "sip_bridge", type: "boolean", default: false })
   sipBridge!: boolean;
 

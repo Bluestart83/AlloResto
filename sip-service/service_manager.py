@@ -51,6 +51,7 @@ APP_BASE_PORT = int(os.getenv("APP_BASE_PORT", "5050"))
 BRIDGE_BASE_PORT = int(os.getenv("BRIDGE_BASE_PORT", "5060"))
 HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))
 REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "300"))
+MAX_CALL_DURATION = int(os.getenv("MAX_CALL_DURATION", "600"))
 MAX_RESTART_ATTEMPTS = 3
 RESTART_WINDOW_S = 300
 SCRIPT_DIR = Path(__file__).parent
@@ -166,13 +167,19 @@ class RestaurantAgent:
                 "RESTAURANT_ID": rid,
                 "OPENAI_API_KEY": OPENAI_API_KEY,
                 "NEXT_API_URL": NEXT_API_URL,
+                "MAX_CALL_DURATION": str(MAX_CALL_DURATION),
             }
+            log_dir = SCRIPT_DIR / "logs"
+            log_dir.mkdir(exist_ok=True)
+            app_log = open(log_dir / f"{rid}-app.log", "a")
+            app_env["PYTHONUNBUFFERED"] = "1"
             self.app_process = subprocess.Popen(
-                [PYTHON, str(SCRIPT_DIR / "app.py")],
+                [PYTHON, "-u", str(SCRIPT_DIR / "app.py")],
                 env=app_env,
                 cwd=str(SCRIPT_DIR),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=app_log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
             logger.info(f"[{name}] app.py démarré (PID={self.app_process.pid}, port={self.ports.app})")
 
@@ -190,16 +197,21 @@ class RestaurantAgent:
                         "--sip-username", self.config.sip_username,
                         "--ws-target", f"ws://localhost:{self.ports.app}/media-stream",
                         "--api-port", str(self.ports.bridge),
+                        "--max-call-duration", str(MAX_CALL_DURATION),
                         "--param", f"restaurantId={rid}",
                     ]
                     if self.config.sip_password:
                         bridge_cmd += ["--sip-password", self.config.sip_password]
 
+                    bridge_log = open(log_dir / f"{rid}-bridge.log", "a")
+                    bridge_env = {**os.environ, "PYTHONUNBUFFERED": "1"}
                     self.bridge_process = subprocess.Popen(
                         bridge_cmd,
                         cwd=str(SCRIPT_DIR),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        env=bridge_env,
+                        stdout=bridge_log,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
                     )
                     logger.info(f"[{name}] sipbridge démarré (PID={self.bridge_process.pid}, port={self.ports.bridge})")
 
@@ -547,30 +559,41 @@ async def main():
     def _shutdown():
         logger.info("Signal reçu, arrêt en cours...")
         asyncio.ensure_future(manager.stop_all())
+        # Force exit after 10s if graceful shutdown hangs
+        loop.call_later(10, lambda: os._exit(0))
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _shutdown)
 
-    # Initial discovery
-    await manager.refresh()
+    # Admin API — start FIRST so the admin page works immediately
+    logger.info(f"Démarrage API admin sur 0.0.0.0:{SERVICE_MANAGER_PORT}")
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=SERVICE_MANAGER_PORT,
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+
+    # Initial discovery in background (don't block uvicorn startup)
+    async def _initial_setup():
+        await asyncio.sleep(1)  # let uvicorn start first
+        try:
+            await manager.refresh()
+        except Exception as e:
+            logger.error(f"Erreur lors du refresh initial : {e}")
+
+    setup_task = asyncio.create_task(_initial_setup())
 
     # Background tasks
     health_task = asyncio.create_task(manager.health_loop())
     refresh_task = asyncio.create_task(manager.refresh_loop())
 
-    # Admin API
-    config = uvicorn.Config(
-        app,
-        host="0.0.0.0",
-        port=SERVICE_MANAGER_PORT,
-        log_level="warning",
-    )
-    server = uvicorn.Server(config)
-
     try:
         await server.serve()
     finally:
         manager._running = False
+        setup_task.cancel()
         health_task.cancel()
         refresh_task.cancel()
         await manager.stop_all()

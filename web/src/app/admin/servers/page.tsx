@@ -2,9 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-const SERVICE_MANAGER_URL =
-  process.env.NEXT_PUBLIC_SERVICE_MANAGER_URL || "http://localhost:8080";
-
 interface AgentInfo {
   restaurantId: string;
   restaurantName: string;
@@ -27,6 +24,7 @@ const STATE_ORDER: Record<string, number> = {
   failed: 3,
   stopping: 4,
   stopped: 5,
+  unknown: 6,
 };
 
 function stateBadge(state: string) {
@@ -37,6 +35,7 @@ function stateBadge(state: string) {
     failed: { cls: "bg-danger", label: "Failed" },
     stopped: { cls: "bg-secondary", label: "Stopped" },
     stopping: { cls: "bg-secondary", label: "Stopping" },
+    unknown: { cls: "bg-secondary", label: "Arrêté" },
   };
   const s = map[state] || { cls: "bg-secondary", label: state };
   return <span className={`badge ${s.cls}`}>{s.label}</span>;
@@ -54,7 +53,7 @@ function formatUptime(seconds: number): string {
 export default function ServersPage() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [managerOnline, setManagerOnline] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("restaurantName");
   const [sortAsc, setSortAsc] = useState(true);
@@ -62,13 +61,14 @@ export default function ServersPage() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const resp = await fetch(`${SERVICE_MANAGER_URL}/agents`);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      setAgents(data);
-      setError(null);
-    } catch (e: any) {
-      setError(e.message || "Connexion au service manager impossible");
+      const resp = await fetch("/api/admin/servers");
+      if (resp.ok) {
+        const data = await resp.json();
+        setAgents(data.agents);
+        setManagerOnline(data.managerOnline);
+      }
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -83,12 +83,14 @@ export default function ServersPage() {
   const handleAction = async (restaurantId: string, action: "start" | "stop" | "restart") => {
     setActionLoading(`${restaurantId}:${action}`);
     try {
-      const resp = await fetch(`${SERVICE_MANAGER_URL}/agents/${restaurantId}/${action}`, {
+      const resp = await fetch("/api/admin/servers", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restaurantId, action }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        throw new Error(data.detail || `HTTP ${resp.status}`);
+        throw new Error(data.error || `HTTP ${resp.status}`);
       }
       await fetchAgents();
     } catch (e: any) {
@@ -100,11 +102,15 @@ export default function ServersPage() {
 
   const handleRefresh = async () => {
     try {
-      await fetch(`${SERVICE_MANAGER_URL}/refresh`, { method: "POST" });
-      await fetchAgents();
+      await fetch("/api/admin/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "refresh" }),
+      });
     } catch {
       // ignore
     }
+    await fetchAgents();
   };
 
   const handleSort = (key: SortKey) => {
@@ -152,13 +158,13 @@ export default function ServersPage() {
           </small>
         </div>
         <button className="btn btn-outline-primary btn-sm" onClick={handleRefresh}>
-          <i className="bi bi-arrow-clockwise me-1"></i>Rafraîchir
+          <i className="bi bi-arrow-clockwise me-1"></i>Rafra&icirc;chir
         </button>
       </div>
 
       {/* Search */}
       <div className="input-group mb-4" style={{ maxWidth: 400 }}>
-        <span className="input-group-text bg-dark border-secondary">
+        <span className="input-group-text">
           <i className="bi bi-search text-muted"></i>
         </span>
         <input
@@ -170,12 +176,14 @@ export default function ServersPage() {
         />
       </div>
 
-      {error && (
+      {!managerOnline && !loading && (
         <div className="alert alert-warning d-flex align-items-center gap-2 mb-4">
           <i className="bi bi-exclamation-triangle"></i>
           <div>
-            <strong>Service Manager inaccessible</strong>
-            <div className="small">{error}</div>
+            <strong>Service Manager hors ligne</strong>
+            <div className="small">
+              Le service manager n&apos;est pas accessible. Les restaurants configurés sont affichés mais le statut temps réel n&apos;est pas disponible.
+            </div>
           </div>
         </div>
       )}
@@ -184,14 +192,15 @@ export default function ServersPage() {
         <div className="text-center py-5">
           <span className="spinner-border text-primary"></span>
         </div>
-      ) : agents.length === 0 && !error ? (
+      ) : agents.length === 0 ? (
         <div className="text-center py-5">
           <i className="bi bi-hdd-rack fs-1 text-muted d-block mb-2"></i>
           <p className="text-muted">Aucun agent vocal configuré</p>
+          <small className="text-muted">Activez le service vocal dans les paramètres d&apos;un restaurant</small>
         </div>
       ) : (
         <div className="table-responsive">
-          <table className="table table-dark table-hover align-middle">
+          <table className="table table-hover align-middle">
             <thead>
               <tr>
                 <th role="button" onClick={() => handleSort("restaurantName")} style={{ cursor: "pointer" }}>
@@ -247,13 +256,19 @@ export default function ServersPage() {
                     </td>
                     <td className="text-muted">{formatUptime(a.uptimeSeconds)}</td>
                     <td>
-                      <small className="font-monospace text-muted">
-                        {a.ports.app}
-                        {a.ports.bridge ? ` / ${a.ports.bridge}` : ""}
-                      </small>
+                      {a.ports.app > 0 ? (
+                        <small className="font-monospace text-muted">
+                          {a.ports.app}
+                          {a.ports.bridge ? ` / ${a.ports.bridge}` : ""}
+                        </small>
+                      ) : (
+                        <small className="text-muted">-</small>
+                      )}
                     </td>
                     <td className="text-end">
-                      {a.state === "stopped" || a.state === "failed" ? (
+                      {!managerOnline ? (
+                        <small className="text-muted">Manager hors ligne</small>
+                      ) : a.state === "stopped" || a.state === "failed" || a.state === "unknown" ? (
                         <button
                           className="btn btn-outline-success btn-sm"
                           onClick={() => handleAction(a.restaurantId, "start")}

@@ -125,16 +125,18 @@ export default function CustomersPage() {
                           <i className="bi bi-telephone me-1"></i>{r.phone}
                         </small>
                       )}
-                      <a
-                        href={getGoogleMapsUrl(r)}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <span
                         className="text-muted"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ fontSize: "0.8rem" }}
+                        role="link"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open(getGoogleMapsUrl(r), "_blank");
+                        }}
+                        style={{ fontSize: "0.8rem", cursor: "pointer" }}
                       >
                         <i className="bi bi-google me-1"></i>Maps
-                      </a>
+                      </span>
                     </div>
                   </div>
                 </div>

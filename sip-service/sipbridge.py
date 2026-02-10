@@ -266,6 +266,7 @@ class SipBridge:
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._endpoint: Optional[Any] = None
         self._account: Optional[Any] = None
+        self._sip_registered: bool = False  # cached state, updated from pjsip thread
         self._executor = ThreadPoolExecutor(max_workers=2)
         self.active_calls: dict[str, CallRecord] = {}
         self.app = self._create_app()
@@ -413,16 +414,9 @@ class SipBridge:
 
         @app.get("/health")
         async def health():
-            reg_active = False
-            if bridge._account:
-                try:
-                    reg_active = bridge._account.getInfo().regIsActive
-                except Exception:
-                    pass
-
             return {
                 "status": "ok",
-                "sip_registered": reg_active,
+                "sip_registered": bridge._sip_registered,
                 "sip_account": f"{bridge.config.sip.username}@{bridge.config.sip.domain}",
                 "ws_target": bridge.config.ws_target,
                 "active_calls": len([
@@ -1117,9 +1111,13 @@ if HAS_PJSIP:
 
         def onRegState(self, prm):
             ai = self.getInfo()
+            # Cache registration state for thread-safe access from /health
+            self.bridge._sip_registered = bool(ai.regIsActive)
             if ai.regIsActive:
                 logger.info(f"SIP REGISTERED — {ai.uri} (code {ai.regStatus}, expires {ai.regExpiresSec}s)")
             elif ai.regStatus // 100 == 2:
+                self.bridge._sip_registered = False
                 logger.info(f"SIP UNREGISTERED — {ai.uri} (code {ai.regStatus})")
             else:
+                self.bridge._sip_registered = False
                 logger.error(f"SIP REGISTRATION FAILED — {ai.uri} (code {ai.regStatus}: {ai.regStatusText})")

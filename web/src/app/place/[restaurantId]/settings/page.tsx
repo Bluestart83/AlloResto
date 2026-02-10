@@ -76,6 +76,17 @@ interface RestaurantData {
   planningConfig: PlanningConfig;
 }
 
+interface PhoneLineData {
+  id: string;
+  phoneNumber: string;
+  provider: string;
+  sipDomain: string | null;
+  sipUsername: string | null;
+  hasSipPassword: boolean;
+  twilioTrunkSid: string | null;
+  isActive: boolean;
+}
+
 export default function SettingsPage() {
   const { restaurantId } = useParams<{ restaurantId: string }>();
   const [data, setData] = useState<RestaurantData | null>(null);
@@ -85,10 +96,40 @@ export default function SettingsPage() {
   const [newHour, setNewHour] = useState("");
   const [newGalleryUrl, setNewGalleryUrl] = useState("");
 
+  // SIP config state
+  const [sipEnabled, setSipEnabled] = useState(false);
+  const [sipBridge, setSipBridge] = useState(false);
+  const [sipPhoneNumber, setSipPhoneNumber] = useState("");
+  const [sipProvider, setSipProvider] = useState("twilio");
+  const [sipDomain, setSipDomain] = useState("");
+  const [sipUsername, setSipUsername] = useState("");
+  const [sipPassword, setSipPassword] = useState("");
+  const [sipTwilioTrunkSid, setSipTwilioTrunkSid] = useState("");
+  const [sipIsActive, setSipIsActive] = useState(true);
+  const [sipHasPassword, setSipHasPassword] = useState(false);
+  const [sipSaving, setSipSaving] = useState(false);
+  const [sipMessage, setSipMessage] = useState<{ type: string; text: string } | null>(null);
+
   useEffect(() => {
-    fetch(`/api/restaurants?id=${restaurantId}`)
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
+    Promise.all([
+      fetch(`/api/restaurants?id=${restaurantId}`).then((r) => r.json()),
+      fetch(`/api/phone-lines?restaurantId=${restaurantId}`).then((r) => r.json()),
+    ])
+      .then(([restaurantData, phoneData]) => {
+        setData(restaurantData);
+        setSipEnabled(phoneData.sipEnabled || false);
+        setSipBridge(phoneData.sipBridge || false);
+        if (phoneData.phoneLine) {
+          setSipPhoneNumber(phoneData.phoneLine.phoneNumber || "");
+          setSipProvider(phoneData.phoneLine.provider || "twilio");
+          setSipDomain(phoneData.phoneLine.sipDomain || "");
+          setSipUsername(phoneData.phoneLine.sipUsername || "");
+          setSipTwilioTrunkSid(phoneData.phoneLine.twilioTrunkSid || "");
+          setSipIsActive(phoneData.phoneLine.isActive);
+          setSipHasPassword(phoneData.phoneLine.hasSipPassword);
+        }
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [restaurantId]);
 
@@ -115,6 +156,43 @@ export default function SettingsPage() {
 
   const update = <K extends keyof RestaurantData>(key: K, value: RestaurantData[K]) => {
     setData((prev) => prev ? { ...prev, [key]: value } : prev);
+  };
+
+  const saveSipConfig = async () => {
+    setSipSaving(true);
+    setSipMessage(null);
+    try {
+      const res = await fetch("/api/phone-lines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurantId,
+          sipEnabled,
+          sipBridge,
+          phoneNumber: sipPhoneNumber,
+          provider: sipBridge ? "sip" : "twilio",
+          sipDomain: sipBridge ? sipDomain : null,
+          sipUsername: sipBridge ? sipUsername : null,
+          sipPassword: sipBridge && sipPassword ? sipPassword : undefined,
+          twilioTrunkSid: !sipBridge ? sipTwilioTrunkSid : null,
+          isActive: sipIsActive,
+        }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setSipHasPassword(result.phoneLine?.hasSipPassword || false);
+        setSipPassword("");
+        setSipMessage({ type: "success", text: "Configuration SIP enregistrée" });
+        setTimeout(() => setSipMessage(null), 3000);
+      } else {
+        const err = await res.json().catch(() => ({ error: "Erreur serveur" }));
+        setSipMessage({ type: "danger", text: err.error || "Erreur" });
+      }
+    } catch {
+      setSipMessage({ type: "danger", text: "Erreur réseau" });
+    } finally {
+      setSipSaving(false);
+    }
   };
 
   if (loading) {
@@ -436,6 +514,114 @@ export default function SettingsPage() {
               }}
             >
               <i className="bi bi-plus"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Téléphonie SIP ── */}
+      <div className="card mb-4">
+        <div className="card-header">
+          <i className="bi bi-telephone me-2"></i>Téléphonie SIP
+        </div>
+        <div className="card-body">
+          {sipMessage && (
+            <div className={`alert alert-${sipMessage.type} py-2 d-flex align-items-center gap-2`}>
+              <i className={`bi ${sipMessage.type === "success" ? "bi-check-circle" : "bi-exclamation-triangle"}`}></i>
+              {sipMessage.text}
+            </div>
+          )}
+
+          {/* Enable SIP service switch */}
+          <div className="form-check form-switch mb-3">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              id="sipEnabledSwitch"
+              checked={sipEnabled}
+              onChange={(e) => setSipEnabled(e.target.checked)}
+            />
+            <label className="form-check-label fw-bold" htmlFor="sipEnabledSwitch">
+              Activer le service vocal
+            </label>
+            <div className="form-text">
+              {sipEnabled
+                ? "Le service vocal est actif — le service manager démarrera l'agent pour ce restaurant."
+                : "Le service vocal est désactivé — aucun agent ne sera démarré."}
+            </div>
+          </div>
+
+          {sipEnabled && (
+            <>
+              <hr />
+              <div className="row g-3">
+                {/* Line active toggle */}
+                <div className="col-12">
+                  <div className="form-check form-switch">
+                    <input className="form-check-input" type="checkbox" checked={sipIsActive} onChange={(e) => setSipIsActive(e.target.checked)} />
+                    <label className="form-check-label">Ligne active</label>
+                  </div>
+                </div>
+
+                {/* Mode toggle */}
+                <div className="col-12">
+                  <label className="form-label fw-bold">Mode</label>
+                  <div className="btn-group w-100">
+                    <button
+                      type="button"
+                      className={`btn ${sipBridge ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setSipBridge(true)}
+                    >
+                      <i className="bi bi-diagram-3 me-1"></i>SIP Bridge (pjsip)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${!sipBridge ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setSipBridge(false)}
+                    >
+                      <i className="bi bi-cloud me-1"></i>Twilio
+                    </button>
+                  </div>
+                </div>
+
+                {/* Phone number */}
+                <div className="col-md-6">
+                  <label className="form-label">Numéro de téléphone</label>
+                  <input className="form-control" value={sipPhoneNumber} onChange={(e) => setSipPhoneNumber(e.target.value)} placeholder="Ex: 0033972360682" />
+                </div>
+
+                {sipBridge ? (
+                  <>
+                    <div className="col-md-6">
+                      <label className="form-label">Domaine SIP</label>
+                      <input className="form-control" value={sipDomain} onChange={(e) => setSipDomain(e.target.value)} placeholder="Ex: sip.ovh.fr" />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">Utilisateur SIP</label>
+                      <input className="form-control" value={sipUsername} onChange={(e) => setSipUsername(e.target.value)} placeholder="Ex: 0033972360682" />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">
+                        Mot de passe SIP
+                        {sipHasPassword && <span className="badge bg-success ms-2">Configuré</span>}
+                      </label>
+                      <input className="form-control" type="password" value={sipPassword} onChange={(e) => setSipPassword(e.target.value)} placeholder={sipHasPassword ? "Laisser vide pour ne pas changer" : "Mot de passe SIP"} />
+                    </div>
+                  </>
+                ) : (
+                  <div className="col-md-6">
+                    <label className="form-label">Twilio Trunk SID</label>
+                    <input className="form-control" value={sipTwilioTrunkSid} onChange={(e) => setSipTwilioTrunkSid(e.target.value)} placeholder="TK..." />
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="mt-3 d-flex justify-content-end">
+            <button className="btn btn-primary d-flex align-items-center gap-2" onClick={saveSipConfig} disabled={sipSaving}>
+              {sipSaving ? <span className="spinner-border spinner-border-sm"></span> : <i className="bi bi-check-lg"></i>}
+              Enregistrer la config SIP
             </button>
           </div>
         </div>

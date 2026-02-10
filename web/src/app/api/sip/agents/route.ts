@@ -14,7 +14,7 @@ export async function GET() {
   const ds = await getDb();
 
   const restaurants = await ds.getRepository(Restaurant).find({
-    where: { isActive: true },
+    where: { isActive: true, sipEnabled: true },
     relations: ["phoneLine"],
   });
 
