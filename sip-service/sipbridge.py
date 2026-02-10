@@ -591,6 +591,8 @@ class SipBridge:
         except asyncio.CancelledError:
             pass
         finally:
+            import os
+
             def _cleanup_pjsip():
                 """Cleanup pjlib calls from a registered thread."""
                 try:
@@ -609,7 +611,14 @@ class SipBridge:
                 self.active_calls.clear()
                 self.pjsip_shutdown()
 
-            await self.loop.run_in_executor(self._executor, _cleanup_pjsip)
+            try:
+                await asyncio.wait_for(
+                    self.loop.run_in_executor(self._executor, _cleanup_pjsip),
+                    timeout=3.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("pjsip cleanup timeout (3s) — force exit")
+                os._exit(0)
             self._executor.shutdown(wait=False)
             logger.info("Bye.")
 
