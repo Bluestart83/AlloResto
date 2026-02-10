@@ -788,7 +788,7 @@ async def media_stream(websocket: WebSocket):
                         # Auto-hangup après au revoir (post commande/réservation/message)
                         if ctx.get("should_hangup"):
                             logger.info("Auto-hangup: commande/réservation confirmée, fin de l'appel")
-                            await asyncio.sleep(1.5)  # laisser l'audio finir
+                            await asyncio.sleep(4.0)  # laisser l'audio jouer côté SIP/Twilio
                             await finalize_call(ctx)
                             await websocket.send_json({"event": "stop", "streamSid": stream_sid})
                             await websocket.close()

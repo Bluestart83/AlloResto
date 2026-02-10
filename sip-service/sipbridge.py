@@ -715,6 +715,7 @@ class _WsSession:
             if call_still_active:
                 logger.info(f"[{self._tag}] WS session ended — sending SIP BYE (hangup)")
                 def _hangup_sip():
+                    import time
                     try:
                         self.bridge._endpoint.libRegisterThread("ws-hangup")
                     except Exception:
@@ -723,6 +724,8 @@ class _WsSession:
                         prm = pj.CallOpParam()
                         record._call_ref.hangup(prm)
                         logger.info(f"[{self.call_sid[:8]}] SIP hangup sent")
+                        # Laisser pjsip traiter le BYE avant de rendre la main
+                        time.sleep(0.3)
                     except Exception as e:
                         logger.warning(f"[{self.call_sid[:8]}] SIP hangup failed: {e}")
                 try:
@@ -936,6 +939,11 @@ if HAS_PJSIP:
                             30, lambda: self.bridge.active_calls.pop(sid, None)
                         )
                     )
+
+                # Nettoyer la ref call pour éviter que le GC Python
+                # détruise l'objet Call depuis un thread non-enregistré
+                if record:
+                    record._call_ref = None
 
                 if self._task and not self._task.done():
                     self.bridge.loop.call_soon_threadsafe(self._task.cancel)
