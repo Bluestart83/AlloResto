@@ -160,6 +160,10 @@ export class Restaurant {
   @Column({ name: "planning_config", type: "simple-json", default: "{}" })
   planningConfig!: Record<string, any>;
 
+  // --- Suivi de commande par téléphone ---
+  @Column({ name: "order_status_enabled", type: "boolean", default: false })
+  orderStatusEnabled!: boolean;
+
   // --- Mode SIP ---
   @Column({ name: "sip_enabled", type: "boolean", default: false })
   sipEnabled!: boolean;

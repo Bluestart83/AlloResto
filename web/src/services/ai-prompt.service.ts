@@ -463,6 +463,18 @@ function buildSystemPrompt(
     ruleNumber++;
   }
 
+  if (restaurant.orderStatusEnabled) {
+    rules.push(`${ruleNumber}. SUIVI DE COMMANDE :
+   - Si le client demande ou en est sa commande, si c'est bientot pret, etc. : appeler check_order_status avec son numero de telephone.
+   - Traduire le statut en francais naturel :
+     pending = "en attente de validation", confirmed = "confirmee", preparing = "en cours de preparation",
+     ready = "prete ! Vous pouvez venir la recuperer", delivering = "en cours de livraison",
+     completed = "deja livree / recuperee", cancelled = "annulee"
+   - Si une heure estimee est disponible, l'annoncer.
+   - Si aucune commande trouvee, dire poliment qu'aucune commande recente n'a ete trouvee pour ce numero.`);
+    ruleNumber++;
+  }
+
   rules.push(`${ruleNumber}. MESSAGES ET DEMANDES SPECIALES :
    - Si le client veut laisser un message, etre rappele, a une reclamation ou une demande speciale : utiliser leave_message
    - Resume le message de facon claire et concise
@@ -564,7 +576,7 @@ FONCTIONS DISPONIBLES
 ${restaurant.reservationEnabled ? "- confirm_reservation : reserver une table confirmee par le client. Inclure seating_preference et notes resumees.\n" : ""}- save_customer_info : sauvegarder prenom / adresse (appeler des que le client donne ces infos)
 - log_new_faq : remonter une question ABSENTE de la FAQ (dire au client "je n'ai pas cette info")
 - leave_message : laisser un message pour le restaurant (rappel, reclamation, demande speciale)
-
+${restaurant.orderStatusEnabled ? "- check_order_status : rechercher les commandes recentes du client par telephone (suivi de commande)\n" : ""}
 ========================================
 CONTROLES AVANT CLOTURE
 ========================================
@@ -820,6 +832,26 @@ function buildTools(restaurant: Restaurant): Tool[] {
           },
         },
         required: ["customer_name", "customer_phone", "party_size", "reservation_time"],
+      },
+    });
+  }
+
+  // Ajouter check_order_status si activé
+  if (restaurant.orderStatusEnabled) {
+    tools.push({
+      type: "function",
+      name: "check_order_status",
+      description:
+        "Recherche les commandes recentes du client (dernières 24h) par son numero de telephone. Utiliser quand le client demande ou est sa commande, si c'est bientot pret, etc. Retourne le statut, le contenu et l'heure estimee.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_phone: {
+            type: "string",
+            description: "Numero de telephone du client (celui de l'appel en cours)",
+          },
+        },
+        required: ["customer_phone"],
       },
     });
   }

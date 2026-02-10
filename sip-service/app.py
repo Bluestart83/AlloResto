@@ -122,6 +122,14 @@ async def fetch_ai_config(restaurant_id: str, caller_phone: str = "") -> dict:
         return resp.json()
 
 
+async def api_get(path: str, params: dict | None = None) -> dict:
+    """GET vers l'API Next.js."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(f"{NEXT_API_URL}{path}", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def api_post(path: str, data: dict) -> dict:
     """POST vers l'API Next.js."""
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -392,6 +400,20 @@ async def handle_leave_message(args: dict, ctx: dict) -> dict:
         return {"success": True, "message": "Message note"}
 
 
+async def handle_check_order_status(args: dict, ctx: dict) -> dict:
+    """Recherche les commandes récentes du client via GET /api/orders/status."""
+    phone = args.get("customer_phone") or ctx.get("caller_phone", "")
+    try:
+        result = await api_get("/api/orders/status", {
+            "restaurantId": ctx["restaurant_id"],
+            "phone": phone,
+        })
+        return result
+    except Exception as e:
+        logger.error(f"Erreur check_order_status: {e}")
+        return {"found": False, "orders": [], "error": "Impossible de verifier le statut"}
+
+
 TOOL_HANDLERS = {
     "check_availability": handle_check_availability,
     "confirm_order": handle_confirm_order,
@@ -399,6 +421,7 @@ TOOL_HANDLERS = {
     "save_customer_info": handle_save_customer,
     "log_new_faq": handle_log_faq,
     "leave_message": handle_leave_message,
+    "check_order_status": handle_check_order_status,
 }
 
 

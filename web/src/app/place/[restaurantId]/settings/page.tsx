@@ -74,6 +74,7 @@ interface RestaurantData {
   minReservationAdvanceMin: number;
   maxReservationAdvanceDays: number;
   planningConfig: PlanningConfig;
+  orderStatusEnabled: boolean;
 }
 
 interface PhoneLineData {
@@ -406,6 +407,15 @@ export default function SettingsPage() {
             <div className="col-12">
               <label className="form-label">Instructions supplémentaires</label>
               <textarea className="form-control" rows={4} value={data.aiInstructions || ""} onChange={(e) => update("aiInstructions", e.target.value || null)} placeholder="Instructions spécifiques pour l'IA (ex: toujours proposer un dessert, vouvoyer le client...)" />
+            </div>
+            <div className="col-12">
+              <div className="form-check form-switch">
+                <input className="form-check-input" type="checkbox" checked={data.orderStatusEnabled} onChange={(e) => update("orderStatusEnabled", e.target.checked)} />
+                <label className="form-check-label">Suivi de commande par téléphone</label>
+              </div>
+              <div className="form-text">
+                Permet aux clients de demander le statut de leur commande en cours lors d&apos;un appel.
+              </div>
             </div>
           </div>
         </div>
