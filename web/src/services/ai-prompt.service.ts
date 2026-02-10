@@ -468,6 +468,11 @@ function buildSystemPrompt(
    - Si le client ne passe ni commande ni reservation, propose-lui de laisser un message avant de raccrocher`);
   ruleNumber++;
 
+  rules.push(`${ruleNumber}. FIN D'APPEL :
+   - Une fois la conversation terminee (commande confirmee, reservation faite, message laisse, ou le client veut raccrocher), dis au revoir au client puis appelle end_call.
+   - TOUJOURS appeler end_call pour raccrocher. Ne jamais laisser l'appel ouvert.`);
+  ruleNumber++;
+
   // Verbatim réservation
   const reservationVerbatim = restaurant.reservationEnabled
     ? `
@@ -817,6 +822,18 @@ function buildTools(restaurant: Restaurant): Tool[] {
       },
     });
   }
+
+  // Tool end_call — toujours disponible
+  tools.push({
+    type: "function",
+    name: "end_call",
+    description:
+      "Raccroche l'appel. Appeler APRES avoir dit au revoir au client, une fois que la conversation est terminee (commande confirmee, reservation faite, message laisse, ou le client veut raccrocher).",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  });
 
   return tools;
 }

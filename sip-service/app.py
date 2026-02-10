@@ -47,6 +47,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORT = int(os.getenv("PORT", 5050))
 NEXT_API_URL = os.getenv("NEXT_API_URL", "http://localhost:3000")
 RESTAURANT_ID = os.getenv("RESTAURANT_ID", "")
+HANGUP_DELAY_S = 0.3  # délai avant envoi du stop après end_call (buffer réseau)
 
 # Événements OpenAI à logger (pour debug)
 LOG_EVENT_TYPES = [
@@ -492,21 +493,23 @@ async def handle_function_call(response: dict, openai_ws, ctx: dict):
     logger.info(f"Tool call: {function_name}")
     logger.info(f"Args: {json.dumps(arguments, indent=2, ensure_ascii=False)}")
 
-    handler = TOOL_HANDLERS.get(function_name)
-    if handler:
-        result = await handler(arguments, ctx)
-        # Marquer si une commande ou réservation a été passée
-        if function_name == "confirm_order" and result.get("success"):
-            ctx["order_placed"] = True
-            ctx["should_hangup"] = True
-        elif function_name == "confirm_reservation" and result.get("success"):
-            ctx["reservation_placed"] = True
-            ctx["should_hangup"] = True
-        elif function_name == "leave_message" and result.get("success"):
-            ctx["message_left"] = True
-            ctx["should_hangup"] = True
+    # end_call — tool spécial géré inline (pas dans TOOL_HANDLERS)
+    if function_name == "end_call":
+        logger.info("Tool end_call: l'IA demande à raccrocher")
+        ctx["should_hangup"] = True
+        result = {"status": "hanging_up"}
     else:
-        result = {"error": f"Fonction inconnue: {function_name}"}
+        handler = TOOL_HANDLERS.get(function_name)
+        if handler:
+            result = await handler(arguments, ctx)
+            if function_name == "confirm_order" and result.get("success"):
+                ctx["order_placed"] = True
+            elif function_name == "confirm_reservation" and result.get("success"):
+                ctx["reservation_placed"] = True
+            elif function_name == "leave_message" and result.get("success"):
+                ctx["message_left"] = True
+        else:
+            result = {"error": f"Fonction inconnue: {function_name}"}
 
     # Répondre à OpenAI
     await openai_ws.send(json.dumps({
@@ -785,10 +788,10 @@ async def media_stream(websocket: WebSocket):
                         })
                         mark_queue.append("responsePart")
 
-                        # Auto-hangup après au revoir (post commande/réservation/message)
+                        # Auto-hangup: déclenché par le tool end_call (l'IA a fini de parler)
                         if ctx.get("should_hangup"):
-                            logger.info("Auto-hangup: commande/réservation confirmée, fin de l'appel")
-                            await asyncio.sleep(4.0)  # laisser l'audio jouer côté SIP/Twilio
+                            logger.info("Auto-hangup: end_call reçu, fermeture de l'appel")
+                            await asyncio.sleep(HANGUP_DELAY_S)
                             await finalize_call(ctx)
                             await websocket.send_json({"event": "stop", "streamSid": stream_sid})
                             await websocket.close()
