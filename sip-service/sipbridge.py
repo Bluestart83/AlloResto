@@ -691,11 +691,29 @@ class _WsSession:
             logger.error(f"[{self._tag}] Erreur session: {e}")
         finally:
             self._alive = False
-            try:
-                async with websockets.connect(self.ws_target):
+            # Raccrocher l'appel SIP quand la session WS se termine
+            record = self.bridge.active_calls.get(self.call_sid)
+            if record and record._call_ref:
+                logger.info(f"[{self._tag}] WS session ended — sending SIP BYE (hangup)")
+                def _hangup_sip():
+                    try:
+                        self.bridge._endpoint.libRegisterThread("ws-hangup")
+                    except Exception:
+                        pass
+                    try:
+                        prm = pj.CallOpParam()
+                        record._call_ref.hangup(prm)
+                        logger.info(f"[{self.call_sid[:8]}] SIP hangup sent")
+                    except Exception as e:
+                        logger.warning(f"[{self.call_sid[:8]}] SIP hangup failed: {e}")
+                try:
+                    await self.bridge.loop.run_in_executor(
+                        self.bridge._executor, _hangup_sip
+                    )
+                except Exception:
                     pass
-            except Exception:
-                pass
+            else:
+                logger.info(f"[{self._tag}] WS session ended — no active SIP call to hangup")
             logger.info(f"[{self._tag}] Session terminée")
 
     async def _watchdog(self):
@@ -749,19 +767,23 @@ class _WsSession:
                         self.audio_port.feed_audio(pcm)
 
                 elif event == "clear":
+                    logger.debug(f"[{self._tag}] ws→sip: clear (barge-in)")
                     if self.audio_port:
                         self.audio_port.clear_audio()
 
                 elif event == "stop":
-                    logger.info(f"[{self._tag}] Received stop event from server — hanging up")
+                    logger.info(f"[{self._tag}] ws→sip: STOP event received — will hangup SIP")
                     self._alive = False
                     break
 
                 elif event == "mark":
-                    pass
+                    logger.debug(f"[{self._tag}] ws→sip: mark")
+
+                else:
+                    logger.info(f"[{self._tag}] ws→sip: unknown event '{event}'")
 
         except websockets.exceptions.ConnectionClosed:
-            pass
+            logger.info(f"[{self._tag}] ws→sip: WebSocket closed by server")
         except Exception as e:
             if self._alive:
                 logger.error(f"[{self._tag}] ws→sip: {e}")
@@ -958,18 +980,8 @@ if HAS_PJSIP:
             )
 
             def on_done(task):
-                if self._connected:
-                    def _do_hangup():
-                        try:
-                            self.bridge._endpoint.libRegisterThread("hangup")
-                        except Exception:
-                            pass
-                        try:
-                            prm = pj.CallOpParam()
-                            self.hangup(prm)
-                        except Exception:
-                            pass
-                    self.bridge.loop.run_in_executor(self.bridge._executor, _do_hangup)
+                # Le hangup SIP est géré dans _WsSession.run() finally
+                logger.debug(f"[{self.call_sid[:8]}] WS session task done (connected={self._connected})")
 
             self._task.add_done_callback(on_done)
 
