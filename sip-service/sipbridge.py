@@ -209,6 +209,7 @@ class CallStatus(str, Enum):
     BUSY = "busy"
     NO_ANSWER = "no-answer"
     CANCELLED = "cancelled"
+    TRANSFERRED = "transferred"
 
 
 class CallDirection(str, Enum):
@@ -520,6 +521,40 @@ class SipBridge:
 
             return {"status": record.status.value, "sid": call_sid}
 
+        @app.post("/api/calls/{call_sid}/transfer")
+        async def transfer_call(call_sid: str, req: _TransferCallRequest):
+            """Transfert aveugle (SIP REFER) vers la destination."""
+            record = bridge.active_calls.get(call_sid)
+            if not record:
+                raise HTTPException(404, "Appel non trouvé")
+
+            if record.status not in (CallStatus.ACTIVE, CallStatus.ANSWERED):
+                raise HTTPException(400, f"Appel non actif (status={record.status.value})")
+
+            call_ref = record._call_ref
+            if not call_ref:
+                raise HTTPException(400, "Référence appel perdue")
+
+            dest = req.destination
+            if not dest.startswith("sip:") and not dest.startswith("tel:"):
+                dest = f"sip:{dest}@{bridge.config.sip.domain}"
+
+            def do_transfer():
+                try:
+                    prm = pj.CallOpParam()
+                    call_ref.xferCall(dest, prm)
+                    logger.info(f"[{call_sid[:8]}] Blind transfer (REFER) vers {dest}")
+                except Exception as e:
+                    logger.error(f"[{call_sid[:8]}] Erreur transfer: {e}")
+                    raise
+
+            try:
+                await bridge.loop.run_in_executor(bridge._executor, do_transfer)
+                record.status = CallStatus.TRANSFERRED
+                return {"status": "transferred", "sid": call_sid, "destination": dest}
+            except Exception as e:
+                raise HTTPException(500, f"Transfer echoue: {e}")
+
         return app
 
     # ── Run ────────────────────────────────────────────────
@@ -644,6 +679,11 @@ class _MakeCallRequest(BaseModel):
     callback_url: str = Field("", alias="callbackUrl", description="URL de callback status")
     timeout_sec: int = Field(30, description="Timeout sonnerie en secondes")
     model_config = {"populate_by_name": True}
+
+
+class _TransferCallRequest(BaseModel):
+    """Requête POST /api/calls/{call_sid}/transfer — transfert aveugle."""
+    destination: str = Field(..., description="SIP URI ou tel: URI de destination")
 
 
 class _WsSession:

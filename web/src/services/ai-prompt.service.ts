@@ -39,6 +39,9 @@ export interface AiSessionConfig {
   sipCredentials: SipCredentials;
   /** Mapping index entier → {id: UUID, name: string} (items + formules) */
   itemMap: Record<number, { id: string; name: string }>;
+  transferEnabled: boolean;
+  transferPhoneNumber: string | null;
+  transferAutomatic: boolean;
 }
 
 interface CustomerContext {
@@ -499,6 +502,19 @@ function buildSystemPrompt(
    - Si le client ne passe ni commande ni reservation, propose-lui de laisser un message avant de raccrocher`);
   ruleNumber++;
 
+  if (restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic) {
+    const casesText = restaurant.transferCases
+      ? restaurant.transferCases.split("\n").filter((l: string) => l.trim()).map((l: string) => `     * ${l.trim()}`).join("\n")
+      : "     * Le client insiste pour parler a un humain";
+    rules.push(`${ruleNumber}. TRANSFERT D'APPEL :
+   - Tu peux transferer l'appel vers un humain du restaurant dans les cas suivants :
+${casesText}
+   - Avant de transferer, previens TOUJOURS le client : "Je vais vous passer un de mes collegues, ne quittez pas."
+   - Appelle transfer_call avec la raison du transfert.
+   - Ne JAMAIS proposer le transfert en premier — d'abord essayer de repondre toi-meme.`);
+    ruleNumber++;
+  }
+
   rules.push(`${ruleNumber}. FIN D'APPEL :
    - Une fois la conversation terminee (commande confirmee, reservation faite, message laisse, ou le client veut raccrocher), dis au revoir au client puis appelle end_call.
    - TOUJOURS appeler end_call pour raccrocher. Ne jamais laisser l'appel ouvert.`);
@@ -594,7 +610,7 @@ FONCTIONS DISPONIBLES
 ${restaurant.reservationEnabled ? "- confirm_reservation : reserver une table confirmee par le client. Inclure seating_preference et notes resumees.\n" : ""}- save_customer_info : sauvegarder prenom / adresse (appeler des que le client donne ces infos)
 - log_new_faq : remonter une question ABSENTE de la FAQ (dire au client "je n'ai pas cette info")
 - leave_message : laisser un message pour le restaurant (rappel, reclamation, demande speciale)
-${restaurant.orderStatusEnabled ? "- check_order_status : rechercher les commandes recentes du client par telephone (suivi de commande)\n- cancel_order : annuler une commande (uniquement si pending ou confirmed, apres confirmation du client)\n" : ""}${restaurant.reservationEnabled ? "- lookup_reservation : rechercher les reservations du client par telephone\n- cancel_reservation : annuler une reservation (apres confirmation du client)\n" : ""}
+${restaurant.orderStatusEnabled ? "- check_order_status : rechercher les commandes recentes du client par telephone (suivi de commande)\n- cancel_order : annuler une commande (uniquement si pending ou confirmed, apres confirmation du client)\n" : ""}${restaurant.reservationEnabled ? "- lookup_reservation : rechercher les reservations du client par telephone\n- cancel_reservation : annuler une reservation (apres confirmation du client)\n" : ""}${restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic ? "- transfer_call : transferer l'appel vers un humain (prevenir le client d'abord)\n" : ""}
 ========================================
 CONTROLES AVANT CLOTURE
 ========================================
@@ -928,6 +944,26 @@ function buildTools(restaurant: Restaurant): Tool[] {
     });
   }
 
+  // Tool transfer_call — si transfert activé (et pas automatique)
+  if (restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic) {
+    tools.push({
+      type: "function",
+      name: "transfer_call",
+      description:
+        "Transfere l'appel vers un humain du restaurant. Previens TOUJOURS le client avant de transferer (ex: 'Je vais vous passer un collegue, ne quittez pas.'). Apres le transfert, l'appel IA se termine.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            description: "Raison du transfert (pour le log)",
+          },
+        },
+        required: ["reason"],
+      },
+    });
+  }
+
   // Tool end_call — toujours disponible
   tools.push({
     type: "function",
@@ -1065,5 +1101,8 @@ export async function buildAiSessionConfig(
     customerContext,
     sipCredentials,
     itemMap,
+    transferEnabled: restaurant.transferEnabled,
+    transferPhoneNumber: restaurant.transferPhoneNumber,
+    transferAutomatic: restaurant.transferAutomatic,
   };
 }

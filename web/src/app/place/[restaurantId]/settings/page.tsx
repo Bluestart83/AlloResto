@@ -75,6 +75,11 @@ interface RestaurantData {
   maxReservationAdvanceDays: number;
   planningConfig: PlanningConfig;
   orderStatusEnabled: boolean;
+  transferEnabled: boolean;
+  transferPhoneNumber: string | null;
+  transferAutomatic: boolean;
+  transferCases: string | null;
+  maxParallelCalls: number;
 }
 
 interface PhoneLineData {
@@ -624,6 +629,22 @@ export default function SettingsPage() {
                     <input className="form-control" value={sipTwilioTrunkSid} onChange={(e) => setSipTwilioTrunkSid(e.target.value)} placeholder="TK..." />
                   </div>
                 )}
+
+                {/* Appels simultanés max */}
+                <div className="col-md-6">
+                  <label className="form-label">Appels simultanes max</label>
+                  <input
+                    className="form-control"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={data.maxParallelCalls}
+                    onChange={(e) => update("maxParallelCalls", parseInt(e.target.value) || 10)}
+                  />
+                  <div className="form-text">
+                    Nombre maximum d'appels en parallele (au-dela : signal occupe).
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -633,6 +654,82 @@ export default function SettingsPage() {
               {sipSaving ? <span className="spinner-border spinner-border-sm"></span> : <i className="bi bi-check-lg"></i>}
               Enregistrer la config SIP
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Transfert d'appel ── */}
+      <div className="card mb-4">
+        <div className="card-header">
+          <i className="bi bi-telephone-forward me-2"></i>Transfert d'appel
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            <div className="col-12">
+              <div className="form-check form-switch">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="transferEnabledSwitch"
+                  checked={data.transferEnabled}
+                  onChange={(e) => update("transferEnabled", e.target.checked)}
+                />
+                <label className="form-check-label fw-bold" htmlFor="transferEnabledSwitch">
+                  Activer le transfert d'appel
+                </label>
+                <div className="form-text">
+                  Permet a l'IA de transferer l'appel vers un humain dans certains cas.
+                </div>
+              </div>
+            </div>
+            {data.transferEnabled && (
+              <>
+                <div className="col-md-6">
+                  <label className="form-label">Numero de transfert</label>
+                  <input
+                    className="form-control"
+                    value={data.transferPhoneNumber || ""}
+                    onChange={(e) => update("transferPhoneNumber", e.target.value || null)}
+                    placeholder="Ex: +33612345678"
+                  />
+                  <div className="form-text">
+                    Numero vers lequel les appels seront transferes.
+                  </div>
+                </div>
+                <div className="col-12">
+                  <div className="form-check form-switch">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="transferAutomaticSwitch"
+                      checked={data.transferAutomatic}
+                      onChange={(e) => update("transferAutomatic", e.target.checked)}
+                    />
+                    <label className="form-check-label fw-bold" htmlFor="transferAutomaticSwitch">
+                      Transfert automatique (sans IA)
+                    </label>
+                    <div className="form-text">
+                      L'appel est directement transfere au numero ci-dessus des le decroche, sans passer par l'IA.
+                    </div>
+                  </div>
+                </div>
+                {!data.transferAutomatic && (
+                  <div className="col-12">
+                    <label className="form-label">Cas de transfert (instructions pour l'IA)</label>
+                    <textarea
+                      className="form-control"
+                      rows={4}
+                      value={data.transferCases || ""}
+                      onChange={(e) => update("transferCases", e.target.value || null)}
+                      placeholder={"Ex:\n- Le client insiste pour parler a un humain\n- Reclamation grave ou litige\n- Demande trop complexe pour l'IA"}
+                    />
+                    <div className="form-text">
+                      Texte libre decrivant quand l'IA doit proposer un transfert. Injecte dans le prompt systeme.
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

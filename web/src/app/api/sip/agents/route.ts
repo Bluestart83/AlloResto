@@ -39,6 +39,7 @@ export async function GET() {
         sipPassword,
         phoneNumber: pl.phoneNumber,
         provider: pl.provider,
+        maxParallelCalls: r.maxParallelCalls || 10,
       };
     });
 

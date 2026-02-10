@@ -91,6 +91,7 @@ async def incoming_call(request: Request):
         form_data = dict(request.query_params)
 
     caller_phone = form_data.get("From", "")
+    call_sid = form_data.get("CallSid", "")
 
     response = VoiceResponse()
     response.pause(length=1)
@@ -100,6 +101,7 @@ async def incoming_call(request: Request):
     stream = Stream(url=f"wss://{host}/media-stream")
     stream.parameter(name="callerPhone", value=caller_phone)
     stream.parameter(name="restaurantId", value=RESTAURANT_ID)
+    stream.parameter(name="callSid", value=call_sid)
     connect.append(stream)
     response.append(connect)
 
@@ -486,6 +488,22 @@ async def handle_cancel_reservation(args: dict, ctx: dict) -> dict:
         return {"success": False, "error": "Erreur lors de l'annulation"}
 
 
+async def handle_transfer_call(args: dict, ctx: dict) -> dict:
+    """Initie un transfert d'appel vers le numéro configuré."""
+    transfer_phone = ctx.get("transfer_phone")
+    if not transfer_phone:
+        return {"success": False, "error": "Pas de numero de transfert configure"}
+
+    reason = args.get("reason", "Demande de l'IA")
+    logger.info(f"Transfer initie: {reason} → {transfer_phone}")
+
+    ctx["transferred"] = True
+    ctx["transfer_reason"] = reason
+    ctx["should_hangup"] = True
+
+    return {"success": True, "message": f"Transfert en cours vers {transfer_phone}"}
+
+
 TOOL_HANDLERS = {
     "check_availability": handle_check_availability,
     "confirm_order": handle_confirm_order,
@@ -497,6 +515,7 @@ TOOL_HANDLERS = {
     "cancel_order": handle_cancel_order,
     "lookup_reservation": handle_lookup_reservation,
     "cancel_reservation": handle_cancel_reservation,
+    "transfer_call": handle_transfer_call,
 }
 
 
@@ -532,7 +551,9 @@ async def finalize_call(ctx: dict):
 
     # Déterminer l'outcome
     outcome = "abandoned"
-    if ctx.get("order_placed"):
+    if ctx.get("transferred"):
+        outcome = "transferred"
+    elif ctx.get("order_placed"):
         outcome = "order_placed"
     elif ctx.get("reservation_placed"):
         outcome = "reservation_placed"
@@ -628,6 +649,56 @@ async def handle_function_call(response: dict, openai_ws, ctx: dict):
 
 
 # ============================================================
+# TRANSFER — Exécution du transfert (Bridge SIP ou Twilio)
+# ============================================================
+
+async def _execute_transfer(ctx: dict, websocket: WebSocket, stream_sid: str):
+    """Exécute le transfert d'appel selon le mode (SIP Bridge ou Twilio)."""
+    transfer_phone = ctx.get("transfer_phone", "")
+    bridge_call_sid = ctx.get("bridge_call_sid")
+    twilio_call_sid = ctx.get("twilio_call_sid")
+
+    if bridge_call_sid:
+        # Mode SIP Bridge : POST vers sipbridge /api/calls/{sid}/transfer
+        bridge_port = os.getenv("BRIDGE_PORT")
+        if bridge_port:
+            try:
+                sip_domain = os.getenv("SIP_DOMAIN", "sip.ovh.fr")
+                dest = f"sip:{transfer_phone}@{sip_domain}"
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.post(
+                        f"http://localhost:{bridge_port}/api/calls/{bridge_call_sid}/transfer",
+                        json={"destination": dest},
+                    )
+                    resp.raise_for_status()
+                    logger.info(f"SIP transfer OK: {resp.json()}")
+            except Exception as e:
+                logger.error(f"SIP transfer echoue: {e}")
+        else:
+            logger.error("SIP transfer: BRIDGE_PORT non defini")
+
+    elif twilio_call_sid:
+        # Mode Twilio : mettre à jour l'appel avec <Dial>
+        try:
+            from twilio.rest import Client as TwilioClient
+            account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+            auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+            if account_sid and auth_token:
+                twilio_client = TwilioClient(account_sid, auth_token)
+                twiml = f"<Response><Dial>{transfer_phone}</Dial></Response>"
+                await asyncio.to_thread(
+                    lambda: twilio_client.calls(twilio_call_sid).update(twiml=twiml)
+                )
+                logger.info(f"Twilio transfer OK: {twilio_call_sid} → {transfer_phone}")
+            else:
+                logger.error("Twilio transfer: TWILIO_ACCOUNT_SID/AUTH_TOKEN manquants")
+        except Exception as e:
+            logger.error(f"Twilio transfer echoue: {e}")
+    else:
+        logger.error("Transfer: ni bridge_call_sid ni twilio_call_sid disponible")
+
+
+# ============================================================
 # WEBSOCKET — Media Stream
 # ============================================================
 
@@ -662,6 +733,12 @@ async def media_stream(websocket: WebSocket):
         "last_availability_check": None,
         # Auto-hangup : raccrocher après le prochain au revoir de l'IA
         "should_hangup": False,
+        # Transfert d'appel
+        "transferred": False,
+        "transfer_phone": None,
+        "transfer_reason": None,
+        "twilio_call_sid": None,
+        "bridge_call_sid": None,
     }
 
     ai_config = None
@@ -759,6 +836,14 @@ async def media_stream(websocket: WebSocket):
                         ctx["caller_phone"] = caller_phone
                         ctx["restaurant_id"] = restaurant_id
 
+                        # Capturer les SIDs pour le transfert
+                        twilio_sid = custom_params.get("callSid", "")
+                        if twilio_sid:
+                            ctx["twilio_call_sid"] = twilio_sid
+                        else:
+                            # Mode SIP bridge : stream_sid = call_sid du bridge
+                            ctx["bridge_call_sid"] = stream_sid
+
                         # 0. Vérifier si le numéro est bloqué
                         if caller_phone and await check_phone_blocked(restaurant_id, caller_phone):
                             logger.info(f"Numero bloque: {caller_phone} — raccrocher")
@@ -775,6 +860,8 @@ async def media_stream(websocket: WebSocket):
                             ctx["delivery_enabled"] = ai_config.get("deliveryEnabled", False)
                             # itemMap: {index_int: {id: UUID, name: str}}
                             ctx["item_map"] = ai_config.get("itemMap", {})
+                            # Config transfert
+                            ctx["transfer_phone"] = ai_config.get("transferPhoneNumber")
 
                             customer = ai_config.get("customerContext")
                             if customer:
@@ -792,11 +879,28 @@ async def media_stream(websocket: WebSocket):
                                 "customerContext": None,
                             }
 
-                        # 2. Configurer la session OpenAI
+                        # 2. Transfert automatique (bypass IA)
+                        if (
+                            ai_config.get("transferAutomatic")
+                            and ai_config.get("transferEnabled")
+                            and ctx.get("transfer_phone")
+                        ):
+                            logger.info(f"Transfert automatique vers {ctx['transfer_phone']}")
+                            ctx["transferred"] = True
+                            ctx["transfer_reason"] = "Transfert automatique"
+                            ctx["call_id"] = await create_call_record(ctx)
+                            await _execute_transfer(ctx, websocket, stream_sid)
+                            await asyncio.sleep(HANGUP_DELAY_S)
+                            await finalize_call(ctx)
+                            await websocket.send_json({"event": "stop", "streamSid": stream_sid})
+                            await websocket.close()
+                            return
+
+                        # 3. Configurer la session OpenAI
                         await send_session_update()
                         logger.info("Session OpenAI configuree")
 
-                        # 3. Créer le call record
+                        # 4. Créer le call record
                         ctx["call_id"] = await create_call_record(ctx)
 
                     elif data["event"] == "mark":
@@ -897,9 +1001,13 @@ async def media_stream(websocket: WebSocket):
                         })
                         mark_queue.append("responsePart")
 
-                        # Auto-hangup: déclenché par le tool end_call (l'IA a fini de parler)
+                        # Auto-hangup: déclenché par end_call ou transfer_call
                         if ctx.get("should_hangup"):
-                            logger.info("Auto-hangup: end_call reçu, fermeture de l'appel")
+                            if ctx.get("transferred"):
+                                logger.info(f"Transfer: transfert vers {ctx.get('transfer_phone')} (raison: {ctx.get('transfer_reason')})")
+                                await _execute_transfer(ctx, websocket, stream_sid)
+                            else:
+                                logger.info("Auto-hangup: end_call reçu, fermeture de l'appel")
                             await asyncio.sleep(HANGUP_DELAY_S)
                             await finalize_call(ctx)
                             await websocket.send_json({"event": "stop", "streamSid": stream_sid})

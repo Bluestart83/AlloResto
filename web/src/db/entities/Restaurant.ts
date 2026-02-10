@@ -174,6 +174,22 @@ export class Restaurant {
   @Column({ name: "sip_bridge", type: "boolean", default: false })
   sipBridge!: boolean;
 
+  // --- Config transfert d'appel ---
+  @Column({ name: "transfer_enabled", type: "boolean", default: false })
+  transferEnabled!: boolean;
+
+  @Column({ name: "transfer_phone_number", type: "varchar", length: 20, nullable: true })
+  transferPhoneNumber!: string | null;
+
+  @Column({ name: "transfer_automatic", type: "boolean", default: false })
+  transferAutomatic!: boolean;
+
+  @Column({ name: "transfer_cases", type: "text", nullable: true })
+  transferCases!: string | null;
+
+  @Column({ name: "max_parallel_calls", type: "int", default: 10 })
+  maxParallelCalls!: number;
+
   @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;
 

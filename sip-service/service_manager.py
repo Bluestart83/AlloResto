@@ -85,6 +85,7 @@ class RestaurantConfig:
     sip_domain: str | None = None
     sip_username: str | None = None
     sip_password: str | None = None
+    max_parallel_calls: int = 10
 
 
 # ── Port Pool ─────────────────────────────────────────────────
@@ -168,6 +169,7 @@ class RestaurantAgent:
                 "OPENAI_API_KEY": OPENAI_API_KEY,
                 "NEXT_API_URL": NEXT_API_URL,
                 "MAX_CALL_DURATION": str(MAX_CALL_DURATION),
+                "BRIDGE_PORT": str(self.ports.bridge) if self.ports.bridge else "",
             }
             log_dir = SCRIPT_DIR / "logs"
             log_dir.mkdir(exist_ok=True)
@@ -198,6 +200,7 @@ class RestaurantAgent:
                         "--ws-target", f"ws://localhost:{self.ports.app}/media-stream",
                         "--api-port", str(self.ports.bridge),
                         "--max-call-duration", str(MAX_CALL_DURATION),
+                        "--max-concurrent-calls", str(self.config.max_parallel_calls),
                         "--param", f"restaurantId={rid}",
                     ]
                     if self.config.sip_password:
@@ -391,6 +394,7 @@ class ServiceManager:
                 sip_domain=r.get("sipDomain"),
                 sip_username=r.get("sipUsername"),
                 sip_password=r.get("sipPassword"),
+                max_parallel_calls=r.get("maxParallelCalls", 10),
             )
 
             ports = self.port_pool.allocate(rid, config.sip_bridge)
