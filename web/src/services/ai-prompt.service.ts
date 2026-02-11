@@ -1195,7 +1195,6 @@ export async function buildAiSessionConfig(
   let customerContext: CustomerContext | null = null;
   if (callerPhone) {
     const customer = await ds.getRepository(Customer).findOneBy({
-      restaurantId,
       phone: callerPhone,
     });
     if (customer) {
