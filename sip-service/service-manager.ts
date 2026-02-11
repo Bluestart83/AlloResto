@@ -41,6 +41,8 @@ const RESTART_WINDOW_S = 300;
 
 const __filename = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(__filename);
+const IS_DEV = process.env.NODE_ENV === "development";
+const LOG_LEVEL = IS_DEV ? "debug" : "info";
 
 // Python : venv ou système
 import { existsSync } from "fs";
@@ -233,7 +235,11 @@ class RestaurantAgent {
         BRIDGE_PORT: this.ports.bridge ? String(this.ports.bridge) : "",
       };
 
-      this.appProcess = spawn("npx", ["tsx", path.join(SCRIPT_DIR, "app.ts")], {
+      const appCmd = IS_DEV
+        ? { bin: "npx", args: ["tsx", path.join(SCRIPT_DIR, "app.ts")] }
+        : { bin: "node", args: [path.join(SCRIPT_DIR, "dist", "app.js")] };
+
+      this.appProcess = spawn(appCmd.bin, appCmd.args, {
         env: appEnv,
         cwd: SCRIPT_DIR,
         stdio: ["ignore", appLogFd, appLogFd],
@@ -712,6 +718,8 @@ async function main(): Promise<void> {
   }
 
   log(`Service Manager démarrage (port=${SERVICE_MANAGER_PORT})`);
+  log(`  MODE = ${IS_DEV ? "development (tsx)" : "production (node)"}`);
+  log(`  LOG_LEVEL = ${LOG_LEVEL}`);
   log(`  NEXT_API_URL = ${NEXT_API_URL}`);
   log(`  APP_BASE_PORT = ${APP_BASE_PORT}`);
   log(`  BRIDGE_BASE_PORT = ${BRIDGE_BASE_PORT}`);

@@ -4,6 +4,10 @@
 #
 # Les deux process tournent en parallèle. CTRL+C arrête tout.
 #
+# Usage :
+#   ./test.sh              # mode dev (tsx)
+#   ./test.sh --prod       # mode prod (node dist/)
+#
 # Variables d'environnement requises :
 #   OPENAI_API_KEY    — clé API OpenAI
 #   RESTAURANT_ID     — ID du restaurant
@@ -30,7 +34,23 @@ fi
 : "${OPENAI_API_KEY:?OPENAI_API_KEY requis}"
 : "${RESTAURANT_ID:?RESTAURANT_ID requis}"
 
-command -v npx >/dev/null 2>&1 || { echo "npx introuvable — installer Node.js"; exit 1; }
+# ── Mode dev / prod ──────────────────────────────────────
+
+MODE="dev"
+if [ "${1:-}" = "--prod" ]; then
+    MODE="prod"
+fi
+
+if [ "$MODE" = "prod" ]; then
+    if [ ! -f "$SCRIPT_DIR/dist/app.js" ]; then
+        echo "Build manquant — lancement de npm run build..."
+        (cd "$SCRIPT_DIR" && npm run build)
+    fi
+    APP_CMD="node $SCRIPT_DIR/dist/app.js"
+else
+    command -v npx >/dev/null 2>&1 || { echo "npx introuvable — installer Node.js"; exit 1; }
+    APP_CMD="npx tsx $SCRIPT_DIR/app.ts"
+fi
 
 # ── Config app.ts ──────────────────────────────────────────
 
@@ -60,12 +80,12 @@ set -m
 
 # ── Lancement app.ts (proxy vocal OpenAI) ─────────────────
 
-echo "▶ app.ts (port $APP_PORT)"
+echo "▶ app.ts (port $APP_PORT, mode $MODE)"
 PORT="$APP_PORT" \
 NEXT_API_URL="$NEXT_API_URL" \
 RESTAURANT_ID="$RESTAURANT_ID" \
 OPENAI_API_KEY="$OPENAI_API_KEY" \
-    npx tsx "$SCRIPT_DIR/app.ts" &
+    $APP_CMD &
 PIDS+=($!)
 
 # ── Lancement SIP bridge (optionnel) ─────────────────────
