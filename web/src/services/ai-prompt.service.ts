@@ -455,6 +455,9 @@ function buildSystemPrompt(
       : JSON.stringify(restaurant.openingHours, null, 2);
 
   // Section client
+  const customerFullAddress = customer?.deliveryAddress
+    ? `${customer.deliveryAddress}, ${customer.deliveryPostalCode || ""} ${customer.deliveryCity || ""}`.trim()
+    : "";
   const customerSection = customer
     ? [
         "CLIENT IDENTIFIE :",
@@ -462,18 +465,21 @@ function buildSystemPrompt(
         `- Telephone : ${customer.phone}`,
         `- Commandes precedentes : ${customer.totalOrders}`,
         `- Total depense : ${customer.totalSpent.toFixed(2)}€`,
-        customer.deliveryAddress
-          ? `- Derniere adresse : ${customer.deliveryAddress}, ${customer.deliveryPostalCode || ""} ${customer.deliveryCity || ""}`
+        customerFullAddress
+          ? `- Adresse de livraison enregistree : ${customerFullAddress}`
           : "- Pas d'adresse de livraison enregistree",
         customer.deliveryNotes
           ? `- Notes de livraison : ${customer.deliveryNotes}`
           : "",
         "",
-        "→ Accueille-le par son prenom. Si livraison, propose la meme adresse.",
+        `→ Accueille-le par son prenom.`,
+        customerFullAddress
+          ? `→ Si livraison, utilise DIRECTEMENT l'adresse enregistree : propose "On livre au ${customerFullAddress} ?" — ne redemande PAS l'adresse. Si le client donne une nouvelle adresse, appelle save_customer_info.`
+          : `→ Si livraison, demande l'adresse complete puis appelle save_customer_info pour l'enregistrer.`,
       ]
         .filter(Boolean)
         .join("\n")
-    : "NOUVEAU CLIENT : Demande son prenom. Si livraison, demande l'adresse complete (rue, code postal, ville).";
+    : "NOUVEAU CLIENT : Demande son prenom. Si livraison, demande l'adresse complete (rue, code postal, ville) puis appelle save_customer_info.";
 
   // Info frais de livraison pour les règles
   let deliveryFeeRule = "";
@@ -521,7 +527,10 @@ function buildSystemPrompt(
   rules.push(`${ruleNumber}. VERIFICATION OBLIGATOIRE — check_availability :
    Tu DOIS appeler check_availability AVANT de confirmer quoi que ce soit.
    - Mode "pickup" : appeler avec mode="pickup". Tu recevras estimatedTime (HH:MM).
-   - Mode "delivery" : demander l'adresse, puis appeler avec mode="delivery" + adresse.
+   - Mode "delivery" : ${customerFullAddress
+      ? `tu connais deja l'adresse du client ("${customerFullAddress}"). Propose-la et demande confirmation. Si le client confirme, utilise cette adresse. Si le client donne une nouvelle adresse, utilise la nouvelle et appelle save_customer_info pour la sauvegarder.`
+      : `demander l'adresse complete (rue, ville, code postal), puis appeler save_customer_info pour l'enregistrer.`}
+     Appeler check_availability avec mode="delivery" + adresse.
      Si available=false → proposer le retrait sur place.
      ${restaurant.deliveryEnabled ? `Si le total est inferieur a ${Number(restaurant.minOrderAmount).toFixed(2)}€ → refuser la livraison.` : ""}
      ${deliveryFeeRule}
@@ -534,10 +543,13 @@ function buildSystemPrompt(
 
   if (restaurant.deliveryEnabled) {
     rules.push(`${ruleNumber}. LIVRAISON :
-   a. Recuperer ou confirmer l'adresse complete (rue, ville, code postal)
+   a. ${customerFullAddress
+      ? `L'adresse de livraison est connue : "${customerFullAddress}". Propose-la au client ("On livre au ${customerFullAddress} ?"). Si le client confirme → utiliser directement. Si le client donne une nouvelle adresse → utiliser la nouvelle.`
+      : `Demander l'adresse complete (rue, ville, code postal).`}
    b. Appeler check_availability(mode="delivery", ...) → tu recevras estimatedTime et deliveryFee
    c. Annoncer les frais de livraison AVANT la confirmation
-   d. Annoncer l'heure de livraison retournee par check_availability`);
+   d. Annoncer l'heure de livraison retournee par check_availability
+   e. IMPORTANT : apres une livraison, si l'adresse est nouvelle ou n'etait pas enregistree, appeler save_customer_info avec delivery_address, delivery_city, delivery_postal_code (et delivery_notes si le client donne des instructions).`);
     ruleNumber++;
   }
 
@@ -701,6 +713,15 @@ ${customer?.firstName
 
 Mode :
 "Que souhaitez-vous ? Commander ${restaurant.deliveryEnabled ? "a emporter, en livraison" : "a emporter"}${restaurant.reservationEnabled ? ", ou reserver une table" : ""} ?"
+
+${customerFullAddress
+    ? `Livraison (adresse connue) :
+"On livre au ${customerFullAddress}, c'est bien ca ?"
+
+Livraison (nouvelle adresse) :
+"Vous souhaitez changer d'adresse ? Donnez-moi la nouvelle adresse, s'il vous plait."`
+    : `Livraison (demander adresse) :
+"A quelle adresse souhaitez-vous etre livre ? La rue, la ville et le code postal, s'il vous plait."`}
 
 Validation horaire (livraison) :
 "Votre commande pourrait etre livree vers [estimatedTime]. Ca vous convient ?"
