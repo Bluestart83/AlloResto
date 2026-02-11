@@ -2,7 +2,7 @@
 #
 # start-manager.sh — Lance le Service Manager (gestion multi-restaurants)
 #
-# Charge .env, trouve le venv Python, et lance service_manager.py.
+# Charge .env et lance service-manager.ts via tsx.
 # CTRL+C arrête proprement le manager + tous les agents.
 #
 
@@ -18,17 +18,11 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     set +a
 fi
 
-# ── Python : venv ou système ─────────────────────────────
-
-if [ -x "$SCRIPT_DIR/venv/bin/python" ]; then
-    PYTHON="$SCRIPT_DIR/venv/bin/python"
-else
-    PYTHON="python"
-fi
-
 # ── Vérifications ──────────────────────────────────────────
 
 : "${OPENAI_API_KEY:?OPENAI_API_KEY requis dans .env}"
+
+command -v npx >/dev/null 2>&1 || { echo "npx introuvable — installer Node.js"; exit 1; }
 
 # ── Lancement ──────────────────────────────────────────────
 
@@ -41,4 +35,4 @@ echo "  Max call:  ${MAX_CALL_DURATION:-600}s"
 echo "=================================="
 echo ""
 
-exec "$PYTHON" "$SCRIPT_DIR/service_manager.py"
+exec npx tsx "$SCRIPT_DIR/service-manager.ts"

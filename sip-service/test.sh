@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# start.sh — Lance le proxy vocal (app.py) + le SIP bridge (si pjsua2 dispo)
+# test.sh — Lance le proxy vocal (app.ts) + le SIP bridge (si pjsua2 dispo)
 #
 # Les deux process tournent en parallèle. CTRL+C arrête tout.
 #
@@ -25,20 +25,14 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     set +a
 fi
 
-# ── Python : venv ou système ─────────────────────────────
-
-if [ -x "$SCRIPT_DIR/venv/bin/python" ]; then
-    PYTHON="$SCRIPT_DIR/venv/bin/python"
-else
-    PYTHON="python"
-fi
-
 # ── Vérifications ──────────────────────────────────────────
 
 : "${OPENAI_API_KEY:?OPENAI_API_KEY requis}"
 : "${RESTAURANT_ID:?RESTAURANT_ID requis}"
 
-# ── Config app.py ──────────────────────────────────────────
+command -v npx >/dev/null 2>&1 || { echo "npx introuvable — installer Node.js"; exit 1; }
+
+# ── Config app.ts ──────────────────────────────────────────
 
 APP_PORT="${PORT:-5050}"
 NEXT_API_URL="${NEXT_API_URL:-http://localhost:3000}"
@@ -64,14 +58,14 @@ trap cleanup EXIT INT TERM
 # Run children in their own process groups so we can kill the whole tree
 set -m
 
-# ── Lancement app.py (proxy vocal OpenAI) ─────────────────
+# ── Lancement app.ts (proxy vocal OpenAI) ─────────────────
 
-echo "▶ app.py (port $APP_PORT)"
+echo "▶ app.ts (port $APP_PORT)"
 PORT="$APP_PORT" \
 NEXT_API_URL="$NEXT_API_URL" \
 RESTAURANT_ID="$RESTAURANT_ID" \
 OPENAI_API_KEY="$OPENAI_API_KEY" \
-    "$PYTHON" "$SCRIPT_DIR/app.py" &
+    npx tsx "$SCRIPT_DIR/app.ts" &
 PIDS+=($!)
 
 # ── Lancement SIP bridge (optionnel) ─────────────────────
