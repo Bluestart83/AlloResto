@@ -1145,6 +1145,26 @@ server.register(async (app) => {
             "response.function_call_arguments.done"
           ) {
             await handleFunctionCall(response, openaiWs!, ctx);
+
+            // end_call: hangup direct (pas de response.create → pas de audio.done)
+            if (ctx.should_hangup && !ctx.transferred) {
+              console.log(
+                `[HANGUP] end_call — delai ${HANGUP_DELAY_S}s avant fermeture`,
+              );
+              await sleep(HANGUP_DELAY_S);
+              console.log(`[HANGUP] Finalisation appel...`);
+              await finalizeCall(ctx);
+              console.log(`[HANGUP] Envoi event stop au stream ${streamSid}`);
+              socket.send(
+                JSON.stringify({
+                  event: "stop",
+                  streamSid,
+                }),
+              );
+              console.log(`[HANGUP] Cleanup`);
+              cleanup();
+              return;
+            }
           }
 
           // Marquer la fin d'un segment audio
