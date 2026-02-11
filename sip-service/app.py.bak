@@ -48,7 +48,8 @@ PORT = int(os.getenv("PORT", 5050))
 NEXT_API_URL = os.getenv("NEXT_API_URL", "http://localhost:3000")
 RESTAURANT_ID = os.getenv("RESTAURANT_ID", "")
 MAX_CALL_DURATION = int(os.getenv("MAX_CALL_DURATION", "600"))  # 10 min par défaut
-HANGUP_DELAY_S = 0.3  # délai avant envoi du stop après end_call (buffer réseau)
+HANGUP_DELAY_S = 0.5  # petit buffer réseau après confirmation playback
+MARK_DRAIN_TIMEOUT_MS = 8000  # timeout max pour attendre les marks (playback audio)
 
 # VAD (Voice Activity Detection) — OpenAI Realtime turn detection
 VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", "0.5"))          # 0.0-1.0 sensibilité
@@ -645,7 +646,11 @@ async def handle_function_call(response: dict, openai_ws, ctx: dict):
             "output": json.dumps(result, ensure_ascii=False),
         },
     }))
-    await openai_ws.send(json.dumps({"type": "response.create"}))
+
+    # Ne PAS demander à l'IA de générer une réponse après end_call
+    # (sinon elle dit "L'appel est maintenant terminé" de façon robotique)
+    if function_name != "end_call":
+        await openai_ws.send(json.dumps({"type": "response.create"}))
 
 
 # ============================================================
@@ -747,6 +752,23 @@ async def media_stream(websocket: WebSocket):
     last_assistant_item = None
     mark_queue = []
     response_start_timestamp_twilio = None
+    pending_hangup_event = None  # asyncio.Event, set when marks drain
+    mute_client = False  # stop forwarding client audio after end_call
+
+    async def wait_for_marks_to_complete():
+        """Attendre que tous les marks soient acquittés (= audio joué côté client)."""
+        nonlocal pending_hangup_event
+        if not mark_queue:
+            logger.info("[HANGUP] Pas de marks en attente — audio deja joue")
+            return
+        logger.info(f"[HANGUP] Attente fin playback ({len(mark_queue)} marks en attente)...")
+        pending_hangup_event = asyncio.Event()
+        try:
+            await asyncio.wait_for(pending_hangup_event.wait(), timeout=MARK_DRAIN_TIMEOUT_MS / 1000)
+        except asyncio.TimeoutError:
+            logger.info(f"[HANGUP] Timeout {MARK_DRAIN_TIMEOUT_MS}ms — marks non acquittes (reste {len(mark_queue)}), on raccroche quand meme")
+        finally:
+            pending_hangup_event = None
 
     # Connexion à OpenAI Realtime API
     openai_ws_url = "wss://api.openai.com/v1/realtime?model=gpt-realtime" # gpt-4o-realtime-preview
@@ -810,7 +832,7 @@ async def media_stream(websocket: WebSocket):
         # TASK 1: Twilio → OpenAI
         # ------------------------------------------------
         async def receive_from_twilio():
-            nonlocal stream_sid, latest_media_timestamp, ai_config
+            nonlocal stream_sid, latest_media_timestamp, ai_config, mute_client
 
             try:
                 async for message in websocket.iter_text():
@@ -818,10 +840,13 @@ async def media_stream(websocket: WebSocket):
 
                     if data["event"] == "media" and openai_ws.open:
                         latest_media_timestamp = int(data["media"]["timestamp"])
-                        await openai_ws.send(json.dumps({
-                            "type": "input_audio_buffer.append",
-                            "audio": data["media"]["payload"],
-                        }))
+                        # Après end_call, ne plus envoyer l'audio client à OpenAI
+                        # pour éviter que le VAD relance une conversation
+                        if not mute_client:
+                            await openai_ws.send(json.dumps({
+                                "type": "input_audio_buffer.append",
+                                "audio": data["media"]["payload"],
+                            }))
 
                     elif data["event"] == "start":
                         stream_sid = data["start"]["streamSid"]
@@ -906,6 +931,10 @@ async def media_stream(websocket: WebSocket):
                     elif data["event"] == "mark":
                         if mark_queue:
                             mark_queue.pop(0)
+                        # Si on attend la fin du playback pour raccrocher
+                        if pending_hangup_event and not mark_queue:
+                            logger.info("[HANGUP] Tous les marks acquittes — audio termine")
+                            pending_hangup_event.set()
 
                     elif data["event"] == "stop":
                         logger.info("Stream arrete par Twilio")
@@ -921,7 +950,7 @@ async def media_stream(websocket: WebSocket):
         # TASK 2: OpenAI → Twilio
         # ------------------------------------------------
         async def send_to_twilio():
-            nonlocal last_assistant_item, response_start_timestamp_twilio
+            nonlocal last_assistant_item, response_start_timestamp_twilio, mute_client
 
             try:
                 async for openai_message in openai_ws:
@@ -964,7 +993,8 @@ async def media_stream(websocket: WebSocket):
                             })
 
                     # Interruption — le client parle pendant que l'IA répond
-                    if response_type == "input_audio_buffer.speech_started":
+                    # (ignoré après end_call pour ne pas couper l'audio de fin)
+                    if response_type == "input_audio_buffer.speech_started" and not mute_client:
                         logger.info("Client interrompt l'IA")
                         if mark_queue and response_start_timestamp_twilio is not None:
                             elapsed = latest_media_timestamp - response_start_timestamp_twilio
@@ -990,7 +1020,26 @@ async def media_stream(websocket: WebSocket):
 
                     # Function calling
                     if response_type == "response.function_call_arguments.done":
+                        fn_name = response.get("name", "")
+
+                        # end_call / transfer_call: couper micro + bloquer interruptions AVANT l'await
+                        # (sinon speech_started peut fire pendant handle_function_call et clear l'audio)
+                        if fn_name in ("end_call", "transfer_call"):
+                            mute_client = True
+                            logger.info(f"[HANGUP] {fn_name} — micro client coupe, interruptions bloquees")
+
                         await handle_function_call(response, openai_ws, ctx)
+
+                        # end_call: attendre fin playback audio IA puis raccrocher
+                        if ctx.get("should_hangup") and not ctx.get("transferred"):
+                            logger.info("[HANGUP] end_call — attente fin playback audio...")
+                            await wait_for_marks_to_complete()
+                            await asyncio.sleep(HANGUP_DELAY_S)
+                            logger.info("[HANGUP] Finalisation appel...")
+                            await finalize_call(ctx)
+                            await websocket.send_json({"event": "stop", "streamSid": stream_sid})
+                            await websocket.close()
+                            return
 
                     # Marquer la fin d'un segment audio
                     if response_type == "response.audio.done":
@@ -1001,14 +1050,14 @@ async def media_stream(websocket: WebSocket):
                         })
                         mark_queue.append("responsePart")
 
-                        # Auto-hangup: déclenché par end_call ou transfer_call
+                        # Auto-hangup: déclenché par transfer_call (end_call passe par function_call_arguments.done)
                         if ctx.get("should_hangup"):
                             if ctx.get("transferred"):
-                                logger.info(f"Transfer: transfert vers {ctx.get('transfer_phone')} (raison: {ctx.get('transfer_reason')})")
+                                logger.info(f"[HANGUP] Transfer vers {ctx.get('transfer_phone')} (raison: {ctx.get('transfer_reason')})")
+                                await wait_for_marks_to_complete()
                                 await _execute_transfer(ctx, websocket, stream_sid)
-                            else:
-                                logger.info("Auto-hangup: end_call reçu, fermeture de l'appel")
                             await asyncio.sleep(HANGUP_DELAY_S)
+                            logger.info("[HANGUP] Finalisation appel...")
                             await finalize_call(ctx)
                             await websocket.send_json({"event": "stop", "streamSid": stream_sid})
                             await websocket.close()
