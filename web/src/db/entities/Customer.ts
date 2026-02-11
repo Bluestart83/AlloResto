@@ -15,15 +15,15 @@ import type { Order } from "./Order";
 import type { Reservation } from "./Reservation";
 
 @Entity("customers")
-@Unique(["phone"])
+@Unique(["restaurantId", "phone"])
 export class Customer {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @Column({ name: "restaurant_id", type: "varchar", nullable: true })
-  restaurantId!: string | null;
+  @Column({ name: "restaurant_id", type: "varchar" })
+  restaurantId!: string;
 
-  @ManyToOne("Restaurant", "customers", { onDelete: "SET NULL" })
+  @ManyToOne("Restaurant", "customers", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

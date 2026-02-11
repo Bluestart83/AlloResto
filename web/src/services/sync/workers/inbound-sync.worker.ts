@@ -494,6 +494,7 @@ async function upsertCustomer(
   const repo = db.getRepository(Customer);
 
   let customer = await repo.findOneBy({
+    restaurantId,
     phone: data.customerPhone,
   });
 
