@@ -11,6 +11,7 @@ import { AppDataSource } from "@/db/data-source";
 import { Restaurant } from "@/db/entities/Restaurant";
 import { Reservation } from "@/db/entities/Reservation";
 import { DiningTable } from "@/db/entities/DiningTable";
+import { DiningService } from "@/db/entities/DiningService";
 import { checkDelivery } from "./delivery.service";
 
 // ============================================================
@@ -45,6 +46,8 @@ export interface AvailabilityResult {
   customerLng?: number;
   // reservation extras
   seatsAvailable?: number;
+  serviceId?: string;
+  serviceName?: string;
 }
 
 // ============================================================
@@ -269,20 +272,36 @@ export async function checkAvailability(
       };
     }
 
-    // Calculer l'heure de fin
-    const endTime = new Date(
-      reservationTime.getTime() + restaurant.avgMealDurationMin * 60000
-    );
-
-    // Calculer le total de places : depuis les tables si définies, sinon totalSeats
-    const activeTables = await ds
-      .getRepository(DiningTable)
+    // Chercher un service actif correspondant au créneau
+    const dayOfWeek = reservationTime.getDay() === 0 ? 7 : reservationTime.getDay(); // 1=Lun..7=Dim
+    const reqHHMM = formatHHMM(reservationTime);
+    const allServices = await ds
+      .getRepository(DiningService)
       .find({ where: { restaurantId: params.restaurantId, isActive: true } });
 
-    const totalSeats =
-      activeTables.length > 0
-        ? activeTables.reduce((sum, t) => sum + t.seats, 0)
-        : restaurant.totalSeats;
+    const matchingService = allServices.find((svc) => {
+      if (!svc.dayOfWeek.includes(dayOfWeek)) return false;
+      const cutoff = svc.lastSeatingTime || svc.endTime;
+      return reqHHMM >= svc.startTime && reqHHMM <= cutoff;
+    });
+
+    // Durée du repas : service > restaurant fallback
+    const durationMin = matchingService?.defaultDurationMin || restaurant.avgMealDurationMin;
+    const endTime = new Date(reservationTime.getTime() + durationMin * 60000);
+
+    // Capacité max : service.maxCovers > tables > restaurant.totalSeats
+    let totalSeats: number;
+    if (matchingService) {
+      totalSeats = matchingService.maxCovers;
+    } else {
+      const activeTables = await ds
+        .getRepository(DiningTable)
+        .find({ where: { restaurantId: params.restaurantId, isActive: true } });
+      totalSeats =
+        activeTables.length > 0
+          ? activeTables.reduce((sum, t) => sum + t.seats, 0)
+          : restaurant.totalSeats;
+    }
 
     // Compter les places occupées sur le créneau
     const overlapping = await ds
@@ -314,6 +333,8 @@ export async function checkAvailability(
         estimatedTimeISO: reservationTime.toISOString(),
         reason: `not_enough_seats_available_${seatsAvailable}_requested_${params.partySize}`,
         seatsAvailable,
+        serviceId: matchingService?.id,
+        serviceName: matchingService?.name,
       };
     }
 
@@ -323,6 +344,8 @@ export async function checkAvailability(
       estimatedTime: formatHHMM(reservationTime),
       estimatedTimeISO: reservationTime.toISOString(),
       seatsAvailable,
+      serviceId: matchingService?.id,
+      serviceName: matchingService?.name,
     };
   }
 

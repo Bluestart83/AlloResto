@@ -218,6 +218,74 @@ class CallDirection(str, Enum):
     OUTBOUND = "outbound"
 
 
+# Country code derived from the SIP trunk number at bridge startup.
+# Set by SipBridge.__init__ — used by _normalize_number for local numbers.
+_trunk_country_code: str = ""
+
+# Known country calling codes (1, 2, or 3 digits after +)
+_COUNTRY_CODES = {
+    "1", "7",  # 1-digit
+    "20", "27", "30", "31", "32", "33", "34", "36", "39",
+    "40", "41", "43", "44", "45", "46", "47", "48", "49",
+    "51", "52", "53", "54", "55", "56", "57", "58",
+    "60", "61", "62", "63", "64", "65", "66",
+    "81", "82", "84", "86", "90", "91", "92", "93", "94", "95",
+    "212", "213", "216", "218", "220", "221", "222", "223",
+    "224", "225", "226", "227", "228", "229",
+    "230", "231", "232", "233", "234", "235", "236", "237",
+    "238", "239", "240", "241", "242", "243", "244", "245",
+    "246", "247", "248", "249", "250", "251", "252", "253",
+    "254", "255", "256", "257", "258", "260", "261", "262",
+    "263", "264", "265", "266", "267", "268", "269",
+    "290", "291", "297", "298", "299",
+    "350", "351", "352", "353", "354", "355", "356", "357",
+    "358", "359", "370", "371", "372", "373", "374", "375",
+    "376", "377", "378", "380", "381", "382", "385", "386",
+    "387", "389",
+    "420", "421", "423",
+    "500", "501", "502", "503", "504", "505", "506", "507",
+    "508", "509", "590", "591", "592", "593", "594", "595",
+    "596", "597", "598", "599",
+    "670", "672", "673", "674", "675", "676", "677", "678",
+    "679", "680", "681", "682", "683", "685", "686", "687",
+    "688", "689", "690", "691", "692",
+    "850", "852", "853", "855", "856",
+    "880", "886",
+    "960", "961", "962", "963", "964", "965", "966", "967",
+    "968", "970", "971", "972", "973", "974", "975", "976",
+    "977", "992", "993", "994", "995", "996", "998",
+}
+
+
+def _derive_country_code(trunk_number: str) -> str:
+    """Extract country calling code from a normalized E.164 trunk number."""
+    if not trunk_number.startswith("+"):
+        return ""
+    digits = trunk_number[1:]
+    # Try 3-digit, 2-digit, 1-digit codes
+    for length in (3, 2, 1):
+        candidate = digits[:length]
+        if candidate in _COUNTRY_CODES:
+            return "+" + candidate
+    return ""
+
+
+def _normalize_number(number: str) -> str:
+    """Normalize phone number to E.164 format.
+
+    - Already +XX → as-is
+    - 00XX... → +XX...
+    - 0X... → +CC X... (using trunk country code)
+    """
+    if not number or number.startswith("+"):
+        return number
+    if number.startswith("00"):
+        return "+" + number[2:]
+    if number.startswith("0") and _trunk_country_code:
+        return _trunk_country_code + number[1:]
+    return number
+
+
 @dataclass
 class CallRecord:
     """Suivi d'un appel (compatible Twilio)."""
@@ -234,6 +302,10 @@ class CallRecord:
     ws_target: str = ""
     callback_url: str = ""
     _call_ref: Any = field(default=None, repr=False)
+
+    def __post_init__(self):
+        self.from_number = _normalize_number(self.from_number)
+        self.to_number = _normalize_number(self.to_number)
 
     def to_dict(self) -> dict:
         d = {
@@ -271,6 +343,14 @@ class SipBridge:
         self._sip_registered: bool = False  # cached state, updated from pjsip thread
         self._executor = ThreadPoolExecutor(max_workers=2)
         self.active_calls: dict[str, CallRecord] = {}
+
+        # Derive trunk country code for local number normalization
+        global _trunk_country_code
+        trunk_e164 = _normalize_number(config.sip.username)
+        _trunk_country_code = _derive_country_code(trunk_e164)
+        if _trunk_country_code:
+            logger.info(f"Trunk country code: {_trunk_country_code} (from {trunk_e164})")
+
         self.app = self._create_app()
 
     # ── Callbacks HTTP ─────────────────────────────────────
@@ -1172,7 +1252,7 @@ if HAS_PJSIP:
             try:
                 clean = sip_uri.replace("<", "").replace(">", "").replace('"', "")
                 if "sip:" in clean:
-                    return clean.split("sip:")[1].split("@")[0]
+                    return _normalize_number(clean.split("sip:")[1].split("@")[0])
             except Exception:
                 pass
             return sip_uri

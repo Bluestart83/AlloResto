@@ -1,6 +1,7 @@
 "use client";
 
 import type { TimelineOrderInfo } from "@/types/planning";
+import { formatPhoneDisplay } from "@/lib/format-phone";
 
 interface HandoffPanelProps {
   orders: TimelineOrderInfo[];
@@ -14,6 +15,10 @@ function formatTime(iso: string | null): string {
 
 function elapsedMin(iso: string): number {
   return Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+}
+
+function firstName(name: string | null): string {
+  return name?.split(" ")[0] || "";
 }
 
 export default function HandoffPanel({ orders, onStatusChange }: HandoffPanelProps) {
@@ -43,7 +48,10 @@ export default function HandoffPanel({ orders, onStatusChange }: HandoffPanelPro
                     {formatTime(order.estimatedReadyAt)}
                   </span>
                   <span className="flex-grow-1 text-truncate">
-                    {order.customerName || order.customerPhone}
+                    {firstName(order.customerName) || formatPhoneDisplay(order.customerPhone)}
+                    {firstName(order.customerName) && order.customerPhone && (
+                      <small className="text-muted ms-1">{formatPhoneDisplay(order.customerPhone)}</small>
+                    )}
                   </span>
                   <button
                     className="btn btn-sm btn-success"
@@ -80,7 +88,10 @@ export default function HandoffPanel({ orders, onStatusChange }: HandoffPanelPro
                     {formatTime(order.handoffAt)}
                   </span>
                   <span className="flex-grow-1 text-truncate">
-                    {order.customerName || order.customerPhone}
+                    {firstName(order.customerName) || formatPhoneDisplay(order.customerPhone)}
+                    {firstName(order.customerName) && order.customerPhone && (
+                      <small className="text-muted ms-1">{formatPhoneDisplay(order.customerPhone)}</small>
+                    )}
                   </span>
                   <small className="text-muted text-truncate" style={{ maxWidth: 120 }}>
                     {order.deliveryAddress}
@@ -117,7 +128,10 @@ export default function HandoffPanel({ orders, onStatusChange }: HandoffPanelPro
               <div key={order.id} className="card border" style={{ fontSize: "0.85rem" }}>
                 <div className="card-body py-2 px-3 d-flex align-items-center gap-2">
                   <span className="flex-grow-1 text-truncate">
-                    {order.customerName || order.customerPhone}
+                    {firstName(order.customerName) || formatPhoneDisplay(order.customerPhone)}
+                    {firstName(order.customerName) && order.customerPhone && (
+                      <small className="text-muted ms-1">{formatPhoneDisplay(order.customerPhone)}</small>
+                    )}
                   </span>
                   <small className="text-muted">
                     <i className="bi bi-clock me-1"></i>

@@ -11,5 +11,7 @@ export { ExternalLoad } from "./ExternalLoad";
 export { SyncPlatformConfig } from "./SyncPlatformConfig";
 export { SyncExternalMapping } from "./SyncExternalMapping";
 export { SyncLog, type SyncDirection, type SyncAction, type SyncStatus } from "./SyncLog";
-export { Service } from "./Service";
+export { DiningService } from "./DiningService";
 export { Offer } from "./Offer";
+export { PricingConfig } from "./PricingConfig";
+export { DeliveryTrip, type TripStatus, type TripStop } from "./DeliveryTrip";

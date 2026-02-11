@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { formatPhoneDisplay } from "@/lib/format-phone";
 
 interface RestaurantRow {
   id: string;
@@ -122,7 +123,7 @@ export default function CustomersPage() {
                     <div className="d-flex align-items-center gap-2 mt-2">
                       {r.phone && (
                         <small className="text-muted">
-                          <i className="bi bi-telephone me-1"></i>{r.phone}
+                          <i className="bi bi-telephone me-1"></i>{formatPhoneDisplay(r.phone)}
                         </small>
                       )}
                       <span

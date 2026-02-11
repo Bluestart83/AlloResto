@@ -20,6 +20,7 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
     { href: "/admin/customers", icon: "bi-people", label: "Clients" },
     { href: "/admin/import", icon: "bi-cloud-download", label: "Import resto" },
     { href: "/admin/servers", icon: "bi-hdd-rack", label: "Serveurs Vocaux" },
+    { href: "/admin/pricing", icon: "bi-currency-dollar", label: "Tarification" },
   ];
 
   const restaurantItems = restaurantId
@@ -28,12 +29,15 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
         { href: `/place/${restaurantId}/dashboard-demo`, icon: "bi-speedometer2", label: "Dashboard (Demo)" },
         { href: `/place/${restaurantId}/planning`, icon: "bi-kanban", label: "Planning" },
         { href: `/place/${restaurantId}/orders`, icon: "bi-bag-check", label: "Commandes" },
+        { href: `/place/${restaurantId}/livraisons`, icon: "bi-truck", label: "Livraisons" },
         { href: `/place/${restaurantId}/reservations`, icon: "bi-calendar-check", label: "Reservations" },
         { href: `/place/${restaurantId}/salles`, icon: "bi-door-open", label: "Salles & Tables" },
+        { href: `/place/${restaurantId}/services`, icon: "bi-clock-history", label: "Services" },
         { href: `/place/${restaurantId}/messages`, icon: "bi-envelope", label: "Messages" },
         { href: `/place/${restaurantId}/calls`, icon: "bi-telephone", label: "Appels" },
         { href: `/place/${restaurantId}/menu`, icon: "bi-book", label: "Menu" },
         { href: `/place/${restaurantId}/formules`, icon: "bi-collection", label: "Formules" },
+        { href: `/place/${restaurantId}/offres`, icon: "bi-gift", label: "Offres" },
         { href: `/place/${restaurantId}/faq`, icon: "bi-question-circle", label: "FAQ" },
       ]
     : [];

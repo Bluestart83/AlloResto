@@ -1,6 +1,7 @@
 "use client";
 
 import type { TopCustomer } from "@/types";
+import { formatPhoneDisplay } from "@/lib/format-phone";
 
 const rankColors = ["bg-warning", "secondary bg-opacity-50", "bg-danger bg-opacity-75", "bg-secondary bg-opacity-25"];
 
@@ -28,7 +29,7 @@ export default function TopCustomersTable({ customers }: { customers: TopCustome
             </div>
             <div className="flex-grow-1 min-width-0">
               <div className="fw-medium text-truncate">{c.name}</div>
-              <small className="text-muted">{c.phone} · {c.lastOrder}</small>
+              <small className="text-muted">{formatPhoneDisplay(c.phone)} · {c.lastOrder}</small>
             </div>
             <div className="text-end">
               <div className="font-monospace fw-bold">{c.spent.toFixed(0)}€</div>

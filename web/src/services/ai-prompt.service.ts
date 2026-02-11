@@ -23,6 +23,10 @@ import { MenuCategory } from "@/db/entities/MenuCategory";
 import { MenuItem } from "@/db/entities/MenuItem";
 import { Customer } from "@/db/entities/Customer";
 import { Faq } from "@/db/entities/Faq";
+import { DiningService } from "@/db/entities/DiningService";
+import { Offer } from "@/db/entities/Offer";
+import { PricingConfig } from "@/db/entities/PricingConfig";
+import { getExchangeRate } from "@/services/exchange-rate.service";
 
 // ============================================================
 // TYPES
@@ -42,6 +46,14 @@ export interface AiSessionConfig {
   transferEnabled: boolean;
   transferPhoneNumber: string | null;
   transferAutomatic: boolean;
+  /** Effective AI cost margin % for this restaurant */
+  aiCostMarginPct: number;
+  /** Restaurant currency (EUR, USD, etc.) */
+  currency: string;
+  /** Exchange rate from USD to restaurant currency (e.g. 0.92 for EUR) */
+  exchangeRateToLocal: number;
+  /** Restaurant timezone (e.g. "Europe/Paris") */
+  timezone: string;
 }
 
 interface CustomerContext {
@@ -297,6 +309,73 @@ function buildReservationText(restaurant: Restaurant): string {
 }
 
 // ============================================================
+// BUILD SERVICES TEXT (services de restauration)
+// ============================================================
+
+const DAY_NAMES = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+
+function buildServicesText(services: DiningService[]): string {
+  const active = services.filter((s) => s.isActive && !s.isPrivate);
+  if (active.length === 0) return "";
+
+  const lines = ["", "SERVICES DE RESTAURATION :"];
+  for (const svc of active) {
+    const days = svc.dayOfWeek.map((d) => DAY_NAMES[d] || `jour${d}`).join(", ");
+    let line = `- ${svc.name} : ${days}, ${svc.startTime}–${svc.endTime}`;
+    if (svc.lastSeatingTime) line += ` (dernier accueil ${svc.lastSeatingTime})`;
+    line += `, ${svc.maxCovers} couverts max, repas ${svc.defaultDurationMin} min`;
+    if (svc.requiresPrepayment && svc.prepaymentAmount) {
+      line += ` — prepaiement ${Number(svc.prepaymentAmount).toFixed(2)}€`;
+    }
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
+
+// ============================================================
+// BUILD OFFERS TEXT (offres / promotions)
+// ============================================================
+
+function buildOffersText(
+  offers: Offer[],
+  itemMap: Record<number, { id: string; name: string }>,
+): string {
+  const active = offers.filter((o) => o.isActive && o.isBookable);
+  if (active.length === 0) return "";
+
+  // Reverse map UUID → index
+  const uuidToIdx = new Map<string, number>();
+  for (const [idx, entry] of Object.entries(itemMap)) {
+    uuidToIdx.set(entry.id, Number(idx));
+  }
+
+  const lines = ["", "OFFRES DISPONIBLES :"];
+  for (const offer of active) {
+    let line = `- ${offer.name}`;
+    if (offer.description) line += ` — ${offer.description}`;
+    if (offer.type !== "menu") line += ` [${offer.type}]`;
+    if (offer.discountPercent) line += ` (-${offer.discountPercent}%)`;
+    if (offer.menuItemId) {
+      const idx = uuidToIdx.get(offer.menuItemId);
+      if (idx !== undefined) line += ` (formule #${idx})`;
+    }
+    if (offer.minPartySize || offer.maxPartySize) {
+      line += ` · ${offer.minPartySize || 1}–${offer.maxPartySize || "∞"} pers.`;
+    }
+    if (!offer.isPermanent && offer.startDate) {
+      line += ` · du ${offer.startDate} au ${offer.endDate || "..."}`;
+    }
+    if (offer.hasPrepayment && offer.prepaymentAmount) {
+      line += ` · prepaiement ${Number(offer.prepaymentAmount).toFixed(2)}€${offer.prepaymentType === "per_person" ? "/pers." : ""}`;
+    }
+    lines.push(line);
+  }
+  lines.push("");
+  lines.push("→ Propose les offres au client lorsqu'il reserve, si elles correspondent a sa situation (taille du groupe, date).");
+  return lines.join("\n");
+}
+
+// ============================================================
 // BUILD FAQ TEXT (base de connaissances)
 // ============================================================
 
@@ -342,22 +421,31 @@ function buildSystemPrompt(
   menuText: string,
   formulesText: string,
   deliveryText: string,
+  servicesText: string,
+  offersText: string,
   faqText: string,
   customer: CustomerContext | null
 ): string {
-  // Heure actuelle en timezone Paris
+  // Heure actuelle dans la timezone du restaurant
+  const tz = restaurant.timezone || "Europe/Paris";
   const now = new Date();
-  const parisTime = now.toLocaleString("fr-FR", {
-    timeZone: "Europe/Paris",
+  const localTime = now.toLocaleString("fr-FR", {
+    timeZone: tz,
     weekday: "long",
     hour: "2-digit",
     minute: "2-digit",
   });
-  const parisHHMM = now.toLocaleString("fr-FR", {
-    timeZone: "Europe/Paris",
+  const localHHMM = now.toLocaleString("fr-FR", {
+    timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+  });
+  const localDate = now.toLocaleDateString("fr-FR", {
+    timeZone: tz,
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
   });
 
   // Horaires lisibles
@@ -473,9 +561,10 @@ function buildSystemPrompt(
    c. Appeler check_availability(mode="reservation", party_size=N, requested_time="HH:MM", seating_preference=...)
    d. Si available=true → annoncer l'heure confirmee et le nombre de places
    e. Si available=false → expliquer la raison et proposer un autre creneau
-   f. Obtenir la confirmation du client
-   g. Si le client a des demandes speciales (anniversaire, chaise bebe, etc.), les noter
-   h. Appeler confirm_reservation avec les infos. IMPORTANT: resume les notes du client de facon claire et concise dans le champ "notes".`);
+   f. S'il y a des OFFRES DISPONIBLES qui correspondent (taille du groupe, date), les proposer au client
+   g. Obtenir la confirmation du client
+   h. Si le client a des demandes speciales (anniversaire, chaise bebe, etc.), les noter
+   i. Appeler confirm_reservation avec les infos + service_id (retourne par check_availability) + offer_id (si le client a choisi une offre). IMPORTANT: resume les notes du client de facon claire et concise dans le champ "notes".`);
     ruleNumber++;
   }
 
@@ -579,7 +668,8 @@ INFORMATIONS RESTAURANT :
 - Telephone : ${restaurant.phone || "non communique"}
 - Services disponibles : ${modesText}
 
-HEURE ACTUELLE : ${parisTime} (${parisHHMM})
+DATE ET HEURE : ${localDate}, ${localTime} (${localHHMM}) — timezone ${tz}
+DEVISE : ${restaurant.currency || "EUR"}
 
 HORAIRES :
 ${hoursText}
@@ -588,6 +678,8 @@ ${menuText}
 ${formulesText}
 ${deliveryText}
 ${reservationText}
+${servicesText}
+${offersText}
 
 ${customerSection}
 ${faqText}
@@ -627,8 +719,9 @@ FONCTIONS DISPONIBLES
 - check_availability : OBLIGATOIRE avant toute confirmation. Modes : pickup, delivery, reservation.
   Retourne available, estimatedTime (HH:MM), et infos supplementaires selon le mode.
   Pour reservation : ajouter seating_preference si le client a une preference de placement.
+  Retourne aussi serviceId et serviceName si un service correspond au creneau.
 - confirm_order : commande confirmee par le client → l'heure vient du dernier check_availability
-${restaurant.reservationEnabled ? "- confirm_reservation : reserver une table confirmee par le client. Inclure seating_preference et notes resumees.\n" : ""}- save_customer_info : sauvegarder prenom / adresse (appeler des que le client donne ces infos)
+${restaurant.reservationEnabled ? "- confirm_reservation : reserver une table confirmee par le client. Inclure seating_preference, service_id (du check_availability), offer_id (si offre choisie), et notes resumees.\n" : ""}- save_customer_info : sauvegarder prenom / adresse (appeler des que le client donne ces infos)
 - log_new_faq : remonter une question ABSENTE de la FAQ (dire au client "je n'ai pas cette info")
 - leave_message : laisser un message pour le restaurant (rappel, reclamation, demande speciale)
 ${restaurant.orderStatusEnabled ? "- check_order_status : rechercher les commandes recentes du client par telephone (suivi de commande)\n- cancel_order : annuler une commande (uniquement si pending ou confirmed, apres confirmation du client)\n" : ""}${restaurant.reservationEnabled ? "- lookup_reservation : rechercher les reservations du client par telephone\n- cancel_reservation : annuler une reservation (apres confirmation du client)\n" : ""}${restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic ? "- transfer_call : transferer l'appel vers un humain (prevenir le client d'abord)\n" : ""}
@@ -856,7 +949,7 @@ function buildTools(restaurant: Restaurant): Tool[] {
       type: "function",
       name: "confirm_reservation",
       description:
-        "Confirme et enregistre une reservation de table. Appeler UNIQUEMENT apres : check_availability(mode='reservation') OK, nombre de personnes et heure confirmes, nom et telephone du client obtenus.",
+        "Confirme et enregistre une reservation de table. Appeler UNIQUEMENT apres : check_availability(mode='reservation') OK, nombre de personnes et heure confirmes, nom et telephone du client obtenus. Si une offre correspond, inclure offer_id. Le service_id est retourne par check_availability.",
       parameters: {
         type: "object",
         properties: {
@@ -880,6 +973,14 @@ function buildTools(restaurant: Restaurant): Tool[] {
             type: "string",
             enum: ["window", "outdoor", "large_table", "quiet", "bar"],
             description: "Preference de placement : fenetre, exterieur, grande table, coin calme, bar",
+          },
+          service_id: {
+            type: "string",
+            description: "ID du service (retourne par check_availability). Optionnel.",
+          },
+          offer_id: {
+            type: "string",
+            description: "ID de l'offre choisie par le client (voir liste OFFRES DISPONIBLES). Optionnel.",
           },
           notes: {
             type: "string",
@@ -1094,6 +1195,31 @@ export async function buildAiSessionConfig(
   // 5. SIP credentials
   const sipCredentials = await resolveSipCredentials(restaurantId);
 
+  // 5b. Services + Offres
+  const diningServices = await ds.getRepository(DiningService).find({
+    where: { restaurantId, isActive: true },
+    order: { displayOrder: "ASC" },
+  });
+
+  const activeOffers = await ds.getRepository(Offer).find({
+    where: { restaurantId, isActive: true },
+  });
+
+  // 5c. Effective AI cost margin: restaurant override or global default
+  let aiCostMarginPct = 30; // ultimate fallback
+  if (restaurant.aiCostMarginPct != null) {
+    aiCostMarginPct = Number(restaurant.aiCostMarginPct);
+  } else {
+    const pricingConfig = await ds.getRepository(PricingConfig).findOne({ where: {} });
+    if (pricingConfig) {
+      aiCostMarginPct = Number(pricingConfig.defaultMarginPct);
+    }
+  }
+
+  // 5d. Currency & exchange rate (USD → restaurant currency)
+  const currency = restaurant.currency || "EUR";
+  const exchangeRateToLocal = await getExchangeRate(currency);
+
   // 6. Build prompt sections + itemMap
   const itemMap: Record<number, { id: string; name: string }> = {};
   const counter = { value: 1 };
@@ -1101,6 +1227,8 @@ export async function buildAiSessionConfig(
   const menuText = buildMenuText(categories, items, itemMap, counter);
   const formulesText = buildFormulesText(categories, items, itemMap, counter);
   const deliveryText = buildDeliveryText(restaurant);
+  const servicesText = buildServicesText(diningServices);
+  const offersText = buildOffersText(activeOffers, itemMap);
   const faqText = buildFaqText(faqs);
 
   const systemPrompt = buildSystemPrompt(
@@ -1108,6 +1236,8 @@ export async function buildAiSessionConfig(
     menuText,
     formulesText,
     deliveryText,
+    servicesText,
+    offersText,
     faqText,
     customerContext
   );
@@ -1125,5 +1255,9 @@ export async function buildAiSessionConfig(
     transferEnabled: restaurant.transferEnabled,
     transferPhoneNumber: restaurant.transferPhoneNumber,
     transferAutomatic: restaurant.transferAutomatic,
+    aiCostMarginPct,
+    currency,
+    exchangeRateToLocal,
+    timezone: restaurant.timezone || "Europe/Paris",
   };
 }

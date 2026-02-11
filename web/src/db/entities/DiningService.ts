@@ -9,15 +9,15 @@ import {
 } from "typeorm";
 import type { Restaurant } from "./Restaurant";
 
-@Entity("services")
-export class Service {
+@Entity("dining_services")
+export class DiningService {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "services", { onDelete: "CASCADE" })
+  @ManyToOne("Restaurant", "diningServices", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

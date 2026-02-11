@@ -1,6 +1,7 @@
 "use client";
 
 import type { RecentCall } from "@/types";
+import { formatPhoneDisplay } from "@/lib/format-phone";
 
 const outcomeBadge: Record<string, { label: string; cls: string }> = {
   order_placed: { label: "Commandé", cls: "badge-order" },
@@ -40,7 +41,7 @@ export default function RecentCallsTable({ calls }: { calls: RecentCall[] }) {
                     <td className="font-monospace text-muted">{call.time}</td>
                     <td>
                       <div className="fw-medium">{call.customerName || "Inconnu"}</div>
-                      <small className="text-muted">{call.callerNumber}</small>
+                      <small className="text-muted">{formatPhoneDisplay(call.callerNumber)}</small>
                     </td>
                     <td className="font-monospace">{fmtDuration(call.duration)}</td>
                     <td>

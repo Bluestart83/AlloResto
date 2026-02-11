@@ -20,7 +20,7 @@ import type { DiningTable } from "./DiningTable";
 import type { Message } from "./Message";
 import type { ExternalLoad } from "./ExternalLoad";
 import type { SyncPlatformConfig } from "./SyncPlatformConfig";
-import type { Service } from "./Service";
+import type { DiningService } from "./DiningService";
 import type { Offer } from "./Offer";
 
 @Entity("restaurants")
@@ -190,6 +190,18 @@ export class Restaurant {
   @Column({ name: "max_parallel_calls", type: "int", default: 10 })
   maxParallelCalls!: number;
 
+  /**
+   * AI cost margin % for this restaurant (null = use global default from PricingConfig).
+   */
+  @Column({
+    name: "ai_cost_margin_pct",
+    type: "decimal",
+    precision: 5,
+    scale: 2,
+    nullable: true,
+  })
+  aiCostMarginPct!: number | null;
+
   @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;
 
@@ -258,8 +270,8 @@ export class Restaurant {
   @OneToMany("SyncPlatformConfig", "restaurant")
   syncPlatformConfigs!: SyncPlatformConfig[];
 
-  @OneToMany("Service", "restaurant")
-  services!: Service[];
+  @OneToMany("DiningService", "restaurant")
+  diningServices!: DiningService[];
 
   @OneToMany("Offer", "restaurant")
   offers!: Offer[];

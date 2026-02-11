@@ -12,7 +12,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "restaurantId required" }, { status: 400 });
   }
 
-  const calls = await ds.getRepository(Call).find({
+  // Cleanup: marquer abandoned les appels in_progress dépassant MAX_CALL_DURATION
+  const maxDuration = parseInt(process.env.MAX_CALL_DURATION || "600");
+  const cutoff = new Date(Date.now() - maxDuration * 1000);
+  const repo = ds.getRepository(Call);
+  const stale = await repo.find({
+    where: { restaurantId, outcome: "in_progress" },
+  });
+  for (const call of stale) {
+    if (new Date(call.startedAt) < cutoff) {
+      await repo.update(call.id, {
+        outcome: "abandoned",
+        endedAt: new Date(new Date(call.startedAt).getTime() + maxDuration * 1000),
+        durationSec: maxDuration,
+      });
+    }
+  }
+
+  const calls = await repo.find({
     where: { restaurantId },
     relations: ["customer"],
     order: { startedAt: "DESC" },

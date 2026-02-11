@@ -18,8 +18,10 @@ import { ExternalLoad } from "./entities/ExternalLoad";
 import { SyncPlatformConfig } from "./entities/SyncPlatformConfig";
 import { SyncExternalMapping } from "./entities/SyncExternalMapping";
 import { SyncLog } from "./entities/SyncLog";
-import { Service } from "./entities/Service";
+import { DiningService } from "./entities/DiningService";
 import { Offer } from "./entities/Offer";
+import { PricingConfig } from "./entities/PricingConfig";
+import { DeliveryTrip } from "./entities/DeliveryTrip";
 
 const entities = [
   Restaurant,
@@ -40,8 +42,10 @@ const entities = [
   SyncPlatformConfig,
   SyncExternalMapping,
   SyncLog,
-  Service,
+  DiningService,
   Offer,
+  PricingConfig,
+  DeliveryTrip,
 ];
 
 // ============================================================

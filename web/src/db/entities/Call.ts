@@ -84,6 +84,26 @@ export class Call {
   })
   costAi!: number;
 
+  /** Currency of costAi and costTelecom (e.g. "EUR", "USD") */
+  @Column({ name: "cost_currency", type: "varchar", length: 3, default: "EUR" })
+  costCurrency!: string;
+
+  // AI model + token tracking (OpenAI Realtime API)
+  @Column({ name: "ai_model", type: "varchar", length: 100, nullable: true })
+  aiModel!: string | null;
+
+  @Column({ name: "input_tokens", type: "int", default: 0 })
+  inputTokens!: number;
+
+  @Column({ name: "output_tokens", type: "int", default: 0 })
+  outputTokens!: number;
+
+  @Column({ name: "input_audio_tokens", type: "int", default: 0 })
+  inputAudioTokens!: number;
+
+  @Column({ name: "output_audio_tokens", type: "int", default: 0 })
+  outputAudioTokens!: number;
+
   @Column({ name: "recording_url", type: "text", nullable: true })
   recordingUrl!: string | null;
 

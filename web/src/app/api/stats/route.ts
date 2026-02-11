@@ -10,7 +10,9 @@ import { getDb } from "@/lib/db";
 import { Call } from "@/db/entities/Call";
 import { Order } from "@/db/entities/Order";
 import { Customer } from "@/db/entities/Customer";
-import { Between, MoreThanOrEqual } from "typeorm";
+import { Restaurant } from "@/db/entities/Restaurant";
+import { MoreThanOrEqual } from "typeorm";
+import { getExchangeRate } from "@/services/exchange-rate.service";
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -35,6 +37,13 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const todayStart = startOfDay(now);
   const weekStart = startOfWeek(now);
+
+  // ---- Restaurant currency + display exchange rate ----
+  // Costs are stored in BILLING_CURRENCY (EUR). If restaurant locale differs, provide fx for display.
+  const restaurant = await ds.getRepository(Restaurant).findOneByOrFail({ id: restaurantId });
+  const billingCurrency = process.env.NEXT_PUBLIC_BILLING_CURRENCY!;
+  const displayCurrency = restaurant.currency;
+  const displayFx = displayCurrency === billingCurrency ? 1 : await getExchangeRate(displayCurrency);
 
   // ---- Calls today ----
   const callsToday = await ds.getRepository(Call).find({
@@ -153,7 +162,7 @@ export async function GET(req: NextRequest) {
     calls: weeklyMap[day].calls,
     orders: weeklyMap[day].orders,
     revenue: Math.round(weeklyMap[day].revenue * 100) / 100,
-    cost: Math.round(weeklyMap[day].cost * 100) / 100,
+    cost: Math.round(weeklyMap[day].cost * displayFx * 100) / 100,
   }));
 
   // ---- Outcome chart ----
@@ -222,6 +231,14 @@ export async function GET(req: NextRequest) {
   const totalMinutes = Math.round(totalDurationSec / 60);
   const costToday = Math.round((totalCostTelecom + totalCostAi) * 100) / 100;
 
+  // Token totals
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  for (const c of callsToday) {
+    totalInputTokens += c.inputTokens || 0;
+    totalOutputTokens += c.outputTokens || 0;
+  }
+
   // Unique callers today
   const uniqueCallers = new Set(callsToday.map((c) => c.callerNumber)).size;
 
@@ -230,7 +247,16 @@ export async function GET(req: NextRequest) {
     where: { restaurantId },
   });
 
+  // Convertir les couts de BILLING_CURRENCY vers devise d'affichage restaurant
+  const fx = displayFx;
+  const costTodayDisplay = Math.round((totalCostTelecom + totalCostAi) * fx * 100) / 100;
+  const costTodayAiDisplay = Math.round(totalCostAi * fx * 100) / 100;
+  const costTodayTelecomDisplay = Math.round(totalCostTelecom * fx * 100) / 100;
+
   return NextResponse.json({
+    billingCurrency,
+    displayCurrency,
+    displayFx: fx,
     kpis: {
       totalCalls,
       totalOrders,
@@ -241,7 +267,10 @@ export async function GET(req: NextRequest) {
       maxConcurrent,
       totalDeliveries,
       totalMinutes,
-      costToday,
+      costToday: costTodayDisplay,
+      costTodayAi: costTodayAiDisplay,
+      costTodayTelecom: costTodayTelecomDisplay,
+      totalTokens: totalInputTokens + totalOutputTokens,
       uniqueCallers,
       totalCustomers,
     },

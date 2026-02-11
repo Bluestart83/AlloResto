@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { isValidE164, formatPhoneDisplay } from "@/lib/format-phone";
 import {
   type PlanningConfig,
   type OrderSize,
@@ -9,6 +10,70 @@ import {
   DEFAULT_PLANNING_CONFIG,
   RESOURCE_LABELS,
 } from "@/types/planning";
+
+const SYNC_PLATFORMS: {
+  value: string;
+  label: string;
+  implemented: boolean;
+  webhookAuth: "hmac" | "bearer" | "none";
+  credentialFields: { key: string; label: string; type?: string }[];
+}[] = [
+  { value: "zenchef", label: "Zenchef", implemented: true, webhookAuth: "hmac", credentialFields: [{ key: "apiKey", label: "API Key" }, { key: "restaurantUid", label: "Restaurant UID" }] },
+  { value: "thefork", label: "TheFork", implemented: false, webhookAuth: "bearer", credentialFields: [{ key: "apiKey", label: "API Key" }, { key: "restaurantId", label: "Restaurant ID" }] },
+  { value: "resengo", label: "Resengo", implemented: false, webhookAuth: "bearer", credentialFields: [{ key: "apiKey", label: "API Key" }, { key: "venueId", label: "Venue ID" }] },
+  { value: "sevenrooms", label: "SevenRooms", implemented: false, webhookAuth: "hmac", credentialFields: [{ key: "clientId", label: "Client ID" }, { key: "clientSecret", label: "Client Secret", type: "password" }, { key: "venueId", label: "Venue ID" }] },
+  { value: "opentable", label: "OpenTable", implemented: false, webhookAuth: "hmac", credentialFields: [{ key: "clientId", label: "Client ID" }, { key: "clientSecret", label: "Client Secret", type: "password" }, { key: "rid", label: "Restaurant ID (RID)" }] },
+  { value: "guestonline", label: "Guestonline", implemented: false, webhookAuth: "bearer", credentialFields: [{ key: "apiKey", label: "API Key" }, { key: "restaurantId", label: "Restaurant ID" }] },
+];
+
+const SYNC_ENTITY_OPTIONS = [
+  { value: "reservation", label: "Reservations" },
+  { value: "order", label: "Commandes" },
+  { value: "menu_item", label: "Items menu" },
+  { value: "offer", label: "Offres / Formules" },
+  { value: "table", label: "Tables & Salles" },
+  { value: "customer", label: "Clients" },
+  { value: "availability", label: "Disponibilites" },
+];
+
+const MASTER_FOR_OPTIONS = [
+  { value: "reservation", label: "Reservations" },
+  { value: "order", label: "Commandes" },
+  { value: "menu_item", label: "Items menu" },
+  { value: "offer", label: "Offres / Formules" },
+  { value: "table", label: "Tables & Salles" },
+  { value: "customer", label: "Clients" },
+  { value: "availability", label: "Disponibilites" },
+];
+
+interface SyncConfigUI {
+  id?: string;
+  platform: string;
+  credentials: Record<string, string>;
+  masterFor: string[];
+  syncEntities: string[];
+  supportsWebhook: boolean;
+  webhookUrl: string | null;
+  webhookSecret: string;
+  pollIntervalSec: number;
+  isActive: boolean;
+  lastSyncAt: string | null;
+  lastError: string | null;
+}
+
+const EMPTY_SYNC_CONFIG: SyncConfigUI = {
+  platform: "",
+  credentials: {},
+  masterFor: [],
+  syncEntities: ["reservation"],
+  supportsWebhook: true,
+  webhookUrl: null,
+  webhookSecret: "",
+  pollIntervalSec: 300,
+  isActive: true,
+  lastSyncAt: null,
+  lastError: null,
+};
 
 const CUISINE_TYPES: { value: string; label: string }[] = [
   { value: "pizza", label: "Pizza" },
@@ -116,12 +181,19 @@ export default function SettingsPage() {
   const [sipSaving, setSipSaving] = useState(false);
   const [sipMessage, setSipMessage] = useState<{ type: string; text: string } | null>(null);
 
+  // Sync integrations state
+  const [syncConfigs, setSyncConfigs] = useState<SyncConfigUI[]>([]);
+  const [syncEditing, setSyncEditing] = useState<SyncConfigUI | null>(null);
+  const [syncSaving, setSyncSaving] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<{ type: string; text: string } | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/restaurants?id=${restaurantId}`).then((r) => r.json()),
       fetch(`/api/phone-lines?restaurantId=${restaurantId}`).then((r) => r.json()),
+      fetch(`/api/sync-configs?restaurantId=${restaurantId}`).then((r) => r.json()),
     ])
-      .then(([restaurantData, phoneData]) => {
+      .then(([restaurantData, phoneData, syncData]) => {
         setData(restaurantData);
         setSipEnabled(phoneData.sipEnabled || false);
         setSipBridge(phoneData.sipBridge || false);
@@ -134,6 +206,7 @@ export default function SettingsPage() {
           setSipIsActive(phoneData.phoneLine.isActive);
           setSipHasPassword(phoneData.phoneLine.hasSipPassword);
         }
+        if (Array.isArray(syncData)) setSyncConfigs(syncData);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -201,6 +274,72 @@ export default function SettingsPage() {
     }
   };
 
+  const saveSyncConfig = async () => {
+    if (!syncEditing) return;
+    setSyncSaving(true);
+    setSyncMessage(null);
+    try {
+      const isNew = !syncEditing.id;
+      const method = isNew ? "POST" : "PATCH";
+      const plat = SYNC_PLATFORMS.find((p) => p.value === syncEditing.platform);
+      const supportsWebhook = plat?.webhookAuth !== "none";
+      const editingWithWebhook = { ...syncEditing, supportsWebhook };
+      const payload = isNew
+        ? { restaurantId, ...editingWithWebhook }
+        : { id: editingWithWebhook.id, ...editingWithWebhook };
+
+      const res = await fetch("/api/sync-configs", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const saved = await res.json();
+        if (isNew) {
+          setSyncConfigs((prev) => [...prev, saved]);
+        } else {
+          setSyncConfigs((prev) => prev.map((c) => (c.id === saved.id ? saved : c)));
+        }
+        setSyncEditing(null);
+        setSyncMessage({ type: "success", text: "Integration enregistree" });
+        setTimeout(() => setSyncMessage(null), 3000);
+      } else {
+        const err = await res.json().catch(() => ({ error: "Erreur serveur" }));
+        setSyncMessage({ type: "danger", text: err.error || "Erreur" });
+      }
+    } catch {
+      setSyncMessage({ type: "danger", text: "Erreur reseau" });
+    } finally {
+      setSyncSaving(false);
+    }
+  };
+
+  const deleteSyncConfig = async (id: string) => {
+    if (!confirm("Supprimer cette integration ?")) return;
+    try {
+      const res = await fetch(`/api/sync-configs?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSyncConfigs((prev) => prev.filter((c) => c.id !== id));
+        setSyncMessage({ type: "success", text: "Integration supprimee" });
+        setTimeout(() => setSyncMessage(null), 3000);
+      }
+    } catch {
+      setSyncMessage({ type: "danger", text: "Erreur reseau" });
+    }
+  };
+
+  const updateSyncEditing = <K extends keyof SyncConfigUI>(key: K, value: SyncConfigUI[K]) => {
+    setSyncEditing((prev) => prev ? { ...prev, [key]: value } : prev);
+  };
+
+  const toggleArrayField = (field: "masterFor" | "syncEntities", value: string) => {
+    if (!syncEditing) return;
+    const arr = syncEditing[field];
+    const next = arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
+    updateSyncEditing(field, next);
+  };
+
   if (loading) {
     return <div className="text-center py-5"><span className="spinner-border text-primary"></span></div>;
   }
@@ -246,7 +385,8 @@ export default function SettingsPage() {
             </div>
             <div className="col-md-4">
               <label className="form-label">Téléphone</label>
-              <input className="form-control" value={data.phone || ""} onChange={(e) => update("phone", e.target.value || null)} />
+              <input className={`form-control ${data.phone && !isValidE164(data.phone) ? "is-invalid" : ""}`} value={formatPhoneDisplay(data.phone || "")} onChange={(e) => update("phone", e.target.value.replace(/[\s.\-()]/g, "") || null)} placeholder="+33..." />
+              {data.phone && !isValidE164(data.phone) && <div className="invalid-feedback">Format E.164 requis (ex: +33612345678)</div>}
             </div>
             <div className="col-md-4">
               <label className="form-label">Site web</label>
@@ -602,7 +742,8 @@ export default function SettingsPage() {
                 {/* Phone number */}
                 <div className="col-md-6">
                   <label className="form-label">Numéro de téléphone</label>
-                  <input className="form-control" value={sipPhoneNumber} onChange={(e) => setSipPhoneNumber(e.target.value)} placeholder="Ex: 0033972360682" />
+                  <input className={`form-control ${sipPhoneNumber && !isValidE164(sipPhoneNumber) ? "is-invalid" : ""}`} value={formatPhoneDisplay(sipPhoneNumber)} onChange={(e) => setSipPhoneNumber(e.target.value.replace(/[\s.\-()]/g, ""))} placeholder="+33972360682" />
+                  {sipPhoneNumber && !isValidE164(sipPhoneNumber) && <div className="invalid-feedback">Format E.164 requis (ex: +33972360682)</div>}
                 </div>
 
                 {sipBridge ? (
@@ -687,11 +828,12 @@ export default function SettingsPage() {
                 <div className="col-md-6">
                   <label className="form-label">Numero de transfert</label>
                   <input
-                    className="form-control"
-                    value={data.transferPhoneNumber || ""}
-                    onChange={(e) => update("transferPhoneNumber", e.target.value || null)}
+                    className={`form-control ${data.transferPhoneNumber && !isValidE164(data.transferPhoneNumber) ? "is-invalid" : ""}`}
+                    value={formatPhoneDisplay(data.transferPhoneNumber || "")}
+                    onChange={(e) => update("transferPhoneNumber", e.target.value.replace(/[\s.\-()]/g, "") || null)}
                     placeholder="Ex: +33612345678"
                   />
+                  {data.transferPhoneNumber && !isValidE164(data.transferPhoneNumber) && <div className="invalid-feedback">Format E.164 requis (ex: +33612345678)</div>}
                   <div className="form-text">
                     Numero vers lequel les appels seront transferes.
                   </div>
@@ -731,6 +873,269 @@ export default function SettingsPage() {
               </>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ── Intégrations (sync) ── */}
+      <div className="card mb-4">
+        <div className="card-header d-flex justify-content-between align-items-center">
+          <span><i className="bi bi-shuffle me-2"></i>Integrations (sync)</span>
+          {!syncEditing && (
+            <button
+              className="btn btn-sm btn-outline-primary"
+              onClick={() => setSyncEditing({ ...EMPTY_SYNC_CONFIG })}
+            >
+              <i className="bi bi-plus-lg me-1"></i>Ajouter
+            </button>
+          )}
+        </div>
+        <div className="card-body">
+          {syncMessage && (
+            <div className={`alert alert-${syncMessage.type} py-2 d-flex align-items-center gap-2`}>
+              <i className={`bi ${syncMessage.type === "success" ? "bi-check-circle" : "bi-exclamation-triangle"}`}></i>
+              {syncMessage.text}
+            </div>
+          )}
+
+          {/* Liste des configs existantes */}
+          {syncConfigs.length === 0 && !syncEditing && (
+            <p className="text-muted mb-0">Aucune integration configuree.</p>
+          )}
+
+          {syncConfigs.map((cfg) => (
+            <div key={cfg.id} className="d-flex align-items-center justify-content-between border rounded p-2 mb-2">
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <strong>{SYNC_PLATFORMS.find((p) => p.value === cfg.platform)?.label || cfg.platform}</strong>
+                <span className={`badge ${cfg.isActive ? "bg-success" : "bg-secondary"}`}>
+                  {cfg.isActive ? "Actif" : "Inactif"}
+                </span>
+                {cfg.lastSyncAt ? (
+                  <small className="text-muted" title={cfg.lastSyncAt}>
+                    <i className="bi bi-arrow-repeat me-1"></i>
+                    {new Date(cfg.lastSyncAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </small>
+                ) : (
+                  <small className="text-muted">Jamais synchronise</small>
+                )}
+                {cfg.lastError && (
+                  <span className="badge bg-danger" title={cfg.lastError}>
+                    <i className="bi bi-exclamation-triangle me-1"></i>Erreur
+                  </span>
+                )}
+              </div>
+              <div className="d-flex gap-1">
+                <button
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => setSyncEditing({
+                    ...cfg,
+                    credentials: {},
+                    webhookSecret: "",
+                  })}
+                >
+                  <i className="bi bi-pencil"></i>
+                </button>
+                <button
+                  className="btn btn-sm btn-outline-danger"
+                  onClick={() => cfg.id && deleteSyncConfig(cfg.id)}
+                >
+                  <i className="bi bi-trash"></i>
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Formulaire d'édition */}
+          {syncEditing && (
+            <div className="border rounded p-3 mt-3 bg-light">
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h6 className="fw-bold mb-0">
+                  {syncEditing.id ? "Modifier l\u2019integration" : "Nouvelle integration"}
+                </h6>
+                {syncEditing.id && (
+                  <div className="form-check form-switch mb-0">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      checked={syncEditing.isActive}
+                      onChange={(e) => updateSyncEditing("isActive", e.target.checked)}
+                    />
+                    <label className="form-check-label fw-bold">
+                      {syncEditing.isActive ? "Actif" : "Inactif"}
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div className="row g-3">
+                {/* Plateforme */}
+                <div className="col-md-4">
+                  <label className="form-label">Plateforme</label>
+                  <select
+                    className="form-select"
+                    value={syncEditing.platform}
+                    disabled={!!syncEditing.id}
+                    onChange={(e) => {
+                      updateSyncEditing("platform", e.target.value);
+                      updateSyncEditing("credentials", {});
+                    }}
+                  >
+                    <option value="">-- Choisir --</option>
+                    {SYNC_PLATFORMS.filter((p) =>
+                      p.implemented && !syncConfigs.some((c) => c.platform === p.value && c.id !== syncEditing.id)
+                    ).map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Credentials dynamiques */}
+                {syncEditing.platform && SYNC_PLATFORMS.find((p) => p.value === syncEditing.platform)?.credentialFields.map((field) => (
+                  <div className="col-md-4" key={field.key}>
+                    <label className="form-label">
+                      {field.label}
+                      {syncEditing.id && <small className="text-muted ms-1">(vide = inchange)</small>}
+                    </label>
+                    <input
+                      className="form-control"
+                      type={field.type || "text"}
+                      value={syncEditing.credentials[field.key] || ""}
+                      onChange={(e) => updateSyncEditing("credentials", {
+                        ...syncEditing.credentials,
+                        [field.key]: e.target.value,
+                      })}
+                      placeholder={syncEditing.id ? "\u2022\u2022\u2022\u2022\u2022\u2022" : ""}
+                    />
+                  </div>
+                ))}
+
+                {/* Entités à synchroniser */}
+                <div className="col-md-6">
+                  <label className="form-label">Entites a synchroniser</label>
+                  <div className="d-flex gap-3">
+                    {SYNC_ENTITY_OPTIONS.map((opt) => (
+                      <div className="form-check" key={opt.value}>
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={syncEditing.syncEntities.includes(opt.value)}
+                          onChange={() => toggleArrayField("syncEntities", opt.value)}
+                        />
+                        <label className="form-check-label">{opt.label}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Master for */}
+                <div className="col-md-6">
+                  <label className="form-label">Source de verite pour</label>
+                  <div className="d-flex gap-3">
+                    {MASTER_FOR_OPTIONS.map((opt) => (
+                      <div className="form-check" key={opt.value}>
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={syncEditing.masterFor.includes(opt.value)}
+                          onChange={() => toggleArrayField("masterFor", opt.value)}
+                        />
+                        <label className="form-check-label">{opt.label}</label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="form-text">
+                    Si coche, la plateforme est maitre pour ce type (ses modifications ecrasent les notres).
+                  </div>
+                </div>
+
+                {/* Webhook — affiché automatiquement si la plateforme supporte les webhooks */}
+                {syncEditing.platform && SYNC_PLATFORMS.find((p) => p.value === syncEditing.platform)?.webhookAuth !== "none" && (
+                  <>
+                    <div className="col-md-8">
+                      <label className="form-label">URL Webhook (a configurer sur la plateforme)</label>
+                      <div className="input-group">
+                        <input
+                          className="form-control bg-white"
+                          readOnly
+                          value={syncEditing.webhookUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/${syncEditing.platform}`}
+                        />
+                        <button
+                          className="btn btn-outline-secondary"
+                          type="button"
+                          onClick={() => {
+                            const url = syncEditing.webhookUrl || `${window.location.origin}/api/webhooks/${syncEditing.platform}`;
+                            navigator.clipboard.writeText(url);
+                          }}
+                        >
+                          <i className="bi bi-clipboard"></i>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      {(() => {
+                        const plat = SYNC_PLATFORMS.find((p) => p.value === syncEditing.platform);
+                        const isBearerAuth = plat?.webhookAuth === "bearer";
+                        const label = isBearerAuth ? "Bearer Token" : "Secret HMAC";
+                        const isRequired = !syncEditing.id;
+                        return (
+                          <>
+                            <label className="form-label">
+                              {label} <span className="text-danger">*</span>
+                              {syncEditing.id && <small className="text-muted ms-1">(vide = inchange)</small>}
+                            </label>
+                            <div className="input-group">
+                              <input
+                                className="form-control"
+                                type="password"
+                                value={syncEditing.webhookSecret}
+                                onChange={(e) => updateSyncEditing("webhookSecret", e.target.value)}
+                                placeholder={syncEditing.id ? "\u2022\u2022\u2022\u2022\u2022\u2022" : label}
+                                required={isRequired}
+                              />
+                              {!isBearerAuth && (
+                                <button
+                                  className="btn btn-outline-secondary"
+                                  type="button"
+                                  title="Generer un secret aleatoire"
+                                  onClick={() => {
+                                    const bytes = new Uint8Array(32);
+                                    crypto.getRandomValues(bytes);
+                                    const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+                                    updateSyncEditing("webhookSecret", hex);
+                                  }}
+                                >
+                                  <i className="bi bi-key"></i>
+                                </button>
+                              )}
+                            </div>
+                            <div className="form-text">
+                              {isBearerAuth
+                                ? "Token envoye par la plateforme dans le header Authorization: Bearer."
+                                : "Cle partagee pour la signature HMAC-SHA256. Cliquer sur la cle pour generer."}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
+
+              </div>
+
+              {/* Boutons */}
+              <div className="mt-3 d-flex justify-content-end gap-2">
+                <button className="btn btn-outline-secondary" onClick={() => setSyncEditing(null)}>
+                  Annuler
+                </button>
+                <button
+                  className="btn btn-primary d-flex align-items-center gap-2"
+                  onClick={saveSyncConfig}
+                  disabled={syncSaving || !syncEditing.platform || (!syncEditing.id && !syncEditing.webhookSecret)}
+                >
+                  {syncSaving ? <span className="spinner-border spinner-border-sm"></span> : <i className="bi bi-check-lg"></i>}
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import type { TimelineOrderInfo } from "@/types/planning";
+import { formatPhoneDisplay } from "@/lib/format-phone";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "--:--";
@@ -13,19 +14,35 @@ function elapsedMin(iso: string): number {
   return Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
 }
 
+interface ActiveTrip {
+  id: string;
+  status: string;
+  orderCount: number;
+  totalDistanceKm: number | null;
+  totalDurationMin: number | null;
+  googleMapsUrl: string | null;
+  createdAt: string;
+}
+
 export default function CourierPage() {
   const { restaurantId } = useParams<{ restaurantId: string }>();
+  const router = useRouter();
   const [orders, setOrders] = useState<TimelineOrderInfo[]>([]);
   const [delivering, setDelivering] = useState<TimelineOrderInfo[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [creatingTrip, setCreatingTrip] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [activeTrips, setActiveTrips] = useState<ActiveTrip[]>([]);
 
   const fetchData = useCallback(() => {
-    fetch(`/api/planning/timeline?restaurantId=${restaurantId}`)
-      .then((r) => r.json())
-      .then((data) => {
+    // Charger timeline + tournées actives en parallèle
+    Promise.all([
+      fetch(`/api/planning/timeline?restaurantId=${restaurantId}`).then((r) => r.json()),
+      fetch(`/api/delivery-trips?restaurantId=${restaurantId}&status=active`).then((r) => r.json()),
+    ])
+      .then(([data, trips]) => {
         if (data.orders) {
           const deliveryReady = data.orders.filter(
             (o: TimelineOrderInfo) => o.status === "ready" && o.orderType === "delivery"
@@ -35,6 +52,9 @@ export default function CourierPage() {
           );
           setOrders(deliveryReady);
           setDelivering(inDelivery);
+        }
+        if (Array.isArray(trips)) {
+          setActiveTrips(trips);
         }
         setLoading(false);
       })
@@ -79,6 +99,31 @@ export default function CourierPage() {
     fetchData();
   };
 
+  const handleCreateTrip = async () => {
+    setCreatingTrip(true);
+    try {
+      const resp = await fetch("/api/delivery-trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurantId,
+          orderIds: Array.from(selected),
+        }),
+      });
+      if (resp.ok) {
+        const trip = await resp.json();
+        router.push(`/place/${restaurantId}/livraisons/${trip.id}`);
+      } else {
+        const err = await resp.json();
+        alert(err.error || "Erreur lors de la creation de la tournee");
+      }
+    } catch {
+      alert("Erreur reseau");
+    } finally {
+      setCreatingTrip(false);
+    }
+  };
+
   const handleDelivered = async (orderId: string) => {
     await fetch("/api/orders", {
       method: "PATCH",
@@ -112,7 +157,7 @@ export default function CourierPage() {
             <i className="bi bi-bicycle me-2"></i>Livreur
           </h4>
           <small className="text-muted">
-            {orders.length} commande(s) prête(s)
+            {orders.length} commande(s) prete(s)
           </small>
         </div>
         <button className="btn btn-sm btn-outline-secondary" onClick={fetchData}>
@@ -120,27 +165,72 @@ export default function CourierPage() {
         </button>
       </div>
 
+      {/* Active trips */}
+      {activeTrips.length > 0 && (
+        <div className="mb-4">
+          <h6 className="fw-bold mb-2">
+            <i className="bi bi-signpost-split me-2"></i>Tournees en cours ({activeTrips.length})
+          </h6>
+          <div className="d-flex flex-column gap-2">
+            {activeTrips.map((trip) => (
+              <div
+                key={trip.id}
+                className="card border border-success"
+                style={{ cursor: "pointer" }}
+                onClick={() => router.push(`/place/${restaurantId}/livraisons/${trip.id}`)}
+              >
+                <div className="card-body py-2 px-3 d-flex align-items-center gap-2">
+                  <i className="bi bi-truck text-success"></i>
+                  <span className="flex-grow-1">
+                    {trip.orderCount} arret(s)
+                    {trip.totalDistanceKm ? ` · ${trip.totalDistanceKm} km` : ""}
+                    {trip.totalDurationMin ? ` · ~${trip.totalDurationMin} min` : ""}
+                  </span>
+                  <span className="badge bg-success">En cours</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Ready orders */}
       {orders.length === 0 ? (
         <div className="text-center py-5">
           <i className="bi bi-check-circle fs-1 text-success d-block mb-2"></i>
-          <p className="text-muted">Aucune commande prête à prendre</p>
+          <p className="text-muted">Aucune commande prete a prendre</p>
         </div>
       ) : (
         <>
-          {/* Select all */}
+          {/* Select all + action buttons */}
           <div className="d-flex justify-content-between align-items-center mb-2">
             <button className="btn btn-sm btn-outline-secondary" onClick={selectAll}>
-              {selected.size === orders.length ? "Tout désélectionner" : "Tout sélectionner"}
+              {selected.size === orders.length ? "Tout deselectionner" : "Tout selectionner"}
             </button>
             {selected.size > 0 && (
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={() => setShowConfirmDialog(true)}
-              >
-                <i className="bi bi-check2-all me-1"></i>
-                Prendre {selected.size} commande(s)
-              </button>
+              <div className="d-flex gap-2">
+                {selected.size >= 1 && (
+                  <button
+                    className="btn btn-sm btn-success"
+                    onClick={handleCreateTrip}
+                    disabled={creatingTrip}
+                  >
+                    {creatingTrip ? (
+                      <span className="spinner-border spinner-border-sm me-1"></span>
+                    ) : (
+                      <i className="bi bi-signpost-split me-1"></i>
+                    )}
+                    Tournee ({selected.size})
+                  </button>
+                )}
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => setShowConfirmDialog(true)}
+                >
+                  <i className="bi bi-check2-all me-1"></i>
+                  Prendre {selected.size}
+                </button>
+              </div>
             )}
           </div>
 
@@ -164,10 +254,10 @@ export default function CourierPage() {
                   </div>
                   <div className="flex-grow-1">
                     <div className="fw-medium">
-                      {order.customerName || order.customerPhone}
+                      {order.customerName || formatPhoneDisplay(order.customerPhone)}
                     </div>
                     <small className="text-muted">
-                      {order.itemCount} article(s) · {Number(order.total).toFixed(2)} €
+                      {order.itemCount} article(s) · {Number(order.total).toFixed(2)} EUR
                     </small>
                     {order.deliveryAddress && (
                       <div className="text-muted" style={{ fontSize: "0.8rem" }}>
@@ -188,7 +278,7 @@ export default function CourierPage() {
         </>
       )}
 
-      {/* In delivery */}
+      {/* In delivery (sans tournee) */}
       {delivering.length > 0 && (
         <div>
           <h6 className="fw-bold mb-2">
@@ -199,7 +289,7 @@ export default function CourierPage() {
               <div key={order.id} className="card border">
                 <div className="card-body py-2 px-3 d-flex align-items-center gap-2">
                   <span className="flex-grow-1">
-                    {order.customerName || order.customerPhone}
+                    {order.customerName || formatPhoneDisplay(order.customerPhone)}
                   </span>
                   <small className="text-muted">
                     <i className="bi bi-clock me-1"></i>
@@ -209,7 +299,7 @@ export default function CourierPage() {
                     className="btn btn-sm btn-outline-success"
                     onClick={() => handleDelivered(order.id)}
                   >
-                    <i className="bi bi-check2-all me-1"></i>Livré
+                    <i className="bi bi-check2-all me-1"></i>Livre
                   </button>
                 </div>
               </div>
@@ -236,7 +326,7 @@ export default function CourierPage() {
               </div>
               <div className="modal-body">
                 <p>
-                  <strong>{selected.size}</strong> commande(s) sélectionnée(s)
+                  <strong>{selected.size}</strong> commande(s) selectionnee(s)
                 </p>
                 {oldestSelected && (
                   <small className="text-muted">
@@ -247,7 +337,7 @@ export default function CourierPage() {
                 <div className="mt-2">
                   {selectedOrders.map((o) => (
                     <div key={o.id} className="d-flex justify-content-between py-1 border-bottom">
-                      <span>{o.customerName || o.customerPhone}</span>
+                      <span>{o.customerName || formatPhoneDisplay(o.customerPhone)}</span>
                       <small className="text-muted text-truncate ms-2" style={{ maxWidth: 200 }}>
                         {o.deliveryAddress}
                       </small>

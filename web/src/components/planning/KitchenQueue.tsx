@@ -1,6 +1,7 @@
 "use client";
 
 import type { TimelineOrderInfo } from "@/types/planning";
+import { formatPhoneDisplay } from "@/lib/format-phone";
 
 interface KitchenQueueProps {
   orders: TimelineOrderInfo[];
@@ -24,8 +25,16 @@ function isLate(cookStartAt: string | null, status: string): boolean {
   return new Date(cookStartAt) < new Date();
 }
 
-function lateMinutes(cookStartAt: string): number {
-  return Math.round((Date.now() - new Date(cookStartAt).getTime()) / 60_000);
+function formatLate(cookStartAt: string): string {
+  const min = Math.round((Date.now() - new Date(cookStartAt).getTime()) / 60_000);
+  if (min < 60) return `+${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `+${h}h${String(m).padStart(2, "0")}` : `+${h}h`;
+}
+
+function firstName(name: string | null): string {
+  return name?.split(" ")[0] || "";
 }
 
 export default function KitchenQueue({ orders, onStatusChange }: KitchenQueueProps) {
@@ -82,7 +91,10 @@ export default function KitchenQueue({ orders, onStatusChange }: KitchenQueuePro
 
                 {/* Customer */}
                 <span className="flex-grow-1 text-truncate">
-                  {order.customerName || order.customerPhone}
+                  {firstName(order.customerName) || formatPhoneDisplay(order.customerPhone)}
+                  {firstName(order.customerName) && order.customerPhone && (
+                    <small className="text-muted ms-1">{formatPhoneDisplay(order.customerPhone)}</small>
+                  )}
                 </span>
 
                 {/* Item count */}
@@ -91,7 +103,7 @@ export default function KitchenQueue({ orders, onStatusChange }: KitchenQueuePro
                 {/* Late badge */}
                 {late && order.cookStartAt && (
                   <span className="badge bg-danger" style={{ fontSize: "0.65rem" }}>
-                    +{lateMinutes(order.cookStartAt)} min
+                    {formatLate(order.cookStartAt)}
                   </span>
                 )}
               </div>

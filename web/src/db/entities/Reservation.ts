@@ -11,7 +11,7 @@ import {
 import type { Restaurant } from "./Restaurant";
 import type { Call } from "./Call";
 import type { Customer } from "./Customer";
-import type { Service } from "./Service";
+import type { DiningService } from "./DiningService";
 import type { DiningRoom } from "./DiningRoom";
 import type { Offer } from "./Offer";
 
@@ -90,9 +90,9 @@ export class Reservation {
   @Column({ name: "service_id", type: "varchar", nullable: true })
   serviceId!: string | null;
 
-  @ManyToOne("Service", { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne("DiningService", { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "service_id" })
-  service!: Service | null;
+  diningService!: DiningService | null;
 
   @Column({ name: "dining_room_id", type: "varchar", nullable: true })
   diningRoomId!: string | null;

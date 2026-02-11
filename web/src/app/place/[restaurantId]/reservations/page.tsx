@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { formatPhoneDisplay, isValidE164 } from "@/lib/format-phone";
 
 const STATUS_LABELS: Record<string, { label: string; bg: string }> = {
   pending: { label: "En attente", bg: "bg-warning" },
@@ -26,6 +27,11 @@ const STATUS_FLOW: Record<string, string[]> = {
   seated: ["completed"],
 };
 
+interface RefData {
+  id: string;
+  name: string;
+}
+
 export default function ReservationsPage() {
   const { restaurantId } = useParams<{ restaurantId: string }>();
   const [reservations, setReservations] = useState<any[]>([]);
@@ -36,6 +42,11 @@ export default function ReservationsPage() {
   );
   const [showAddForm, setShowAddForm] = useState(false);
 
+  // Reference data
+  const [diningServices, setDiningServices] = useState<RefData[]>([]);
+  const [offers, setOffers] = useState<RefData[]>([]);
+  const [rooms, setRooms] = useState<RefData[]>([]);
+
   // New reservation form
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -44,6 +55,9 @@ export default function ReservationsPage() {
   const [newTime, setNewTime] = useState("19:00");
   const [newNotes, setNewNotes] = useState("");
   const [newSeatingPref, setNewSeatingPref] = useState("");
+  const [newServiceId, setNewServiceId] = useState("");
+  const [newOfferId, setNewOfferId] = useState("");
+  const [newRoomId, setNewRoomId] = useState("");
   const [adding, setAdding] = useState(false);
 
   const fetchReservations = () => {
@@ -59,9 +73,25 @@ export default function ReservationsPage() {
       .catch(() => setLoading(false));
   };
 
+  // Load reference data once
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/dining-services?restaurantId=${restaurantId}`).then((r) => r.json()),
+      fetch(`/api/offers?restaurantId=${restaurantId}`).then((r) => r.json()),
+      fetch(`/api/rooms?restaurantId=${restaurantId}`).then((r) => r.json()),
+    ]).then(([svc, off, rm]) => {
+      setDiningServices((Array.isArray(svc) ? svc : []).filter((s: any) => s.isActive).map((s: any) => ({ id: s.id, name: s.name })));
+      setOffers((Array.isArray(off) ? off : []).filter((o: any) => o.isActive).map((o: any) => ({ id: o.id, name: o.name })));
+      setRooms((Array.isArray(rm) ? rm : []).map((r: any) => ({ id: r.id, name: r.name })));
+    }).catch(() => {});
+  }, [restaurantId]);
+
   useEffect(() => {
     fetchReservations();
   }, [restaurantId, statusFilter, dateFilter]);
+
+  const refName = (list: RefData[], id: string | null) =>
+    id ? list.find((r) => r.id === id)?.name || null : null;
 
   const handleStatusChange = async (id: string, newStatus: string) => {
     await fetch("/api/reservations", {
@@ -89,6 +119,9 @@ export default function ReservationsPage() {
           status: "confirmed",
           seatingPreference: newSeatingPref || null,
           notes: newNotes.trim() || null,
+          serviceId: newServiceId || null,
+          offerId: newOfferId || null,
+          diningRoomId: newRoomId || null,
         }),
       });
       setShowAddForm(false);
@@ -98,6 +131,9 @@ export default function ReservationsPage() {
       setNewTime("19:00");
       setNewSeatingPref("");
       setNewNotes("");
+      setNewServiceId("");
+      setNewOfferId("");
+      setNewRoomId("");
       fetchReservations();
     } finally {
       setAdding(false);
@@ -166,11 +202,12 @@ export default function ReservationsPage() {
               <div className="col-md-4">
                 <label className="form-label">Telephone *</label>
                 <input
-                  className="form-control"
-                  placeholder="06 12 34 56 78"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
+                  className={`form-control ${newPhone && !isValidE164(newPhone) ? "is-invalid" : ""}`}
+                  placeholder="+33612345678"
+                  value={formatPhoneDisplay(newPhone)}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/[\s.\-()]/g, ""))}
                 />
+                {newPhone && !isValidE164(newPhone) && <div className="invalid-feedback">Format +XX requis</div>}
               </div>
               <div className="col-md-4">
                 <label className="form-label">Personnes</label>
@@ -216,6 +253,51 @@ export default function ReservationsPage() {
                   <option value="bar">Bar</option>
                 </select>
               </div>
+              {diningServices.length > 0 && (
+                <div className="col-md-4">
+                  <label className="form-label">Service</label>
+                  <select
+                    className="form-select"
+                    value={newServiceId}
+                    onChange={(e) => setNewServiceId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {diningServices.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {offers.length > 0 && (
+                <div className="col-md-4">
+                  <label className="form-label">Offre</label>
+                  <select
+                    className="form-select"
+                    value={newOfferId}
+                    onChange={(e) => setNewOfferId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {offers.map((o) => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {rooms.length > 0 && (
+                <div className="col-md-4">
+                  <label className="form-label">Salle</label>
+                  <select
+                    className="form-select"
+                    value={newRoomId}
+                    onChange={(e) => setNewRoomId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {rooms.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="col-md-8">
                 <label className="form-label">Notes</label>
                 <input
@@ -290,7 +372,7 @@ export default function ReservationsPage() {
                     </span>
                     <div className="flex-grow-1">
                       <div className="fw-medium">
-                        {resa.customerName || resa.customerPhone || "Client"}
+                        {resa.customerName || formatPhoneDisplay(resa.customerPhone) || "Client"}
                       </div>
                       <small className="text-muted">
                         <i className="bi bi-people me-1"></i>
@@ -299,7 +381,7 @@ export default function ReservationsPage() {
                           <>
                             {" "}
                             <i className="bi bi-telephone ms-2 me-1"></i>
-                            {resa.customerPhone}
+                            {formatPhoneDisplay(resa.customerPhone)}
                           </>
                         )}
                       </small>
@@ -315,8 +397,26 @@ export default function ReservationsPage() {
                     </div>
                   </div>
 
-                  {(resa.seatingPreference || resa.notes) && (
+                  {(resa.seatingPreference || resa.notes || resa.serviceId || resa.offerId || resa.diningRoomId) && (
                     <div className="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                      {resa.serviceId && (
+                        <span className="badge bg-secondary">
+                          <i className="bi bi-clock-history me-1"></i>
+                          {refName(diningServices, resa.serviceId) || "Service"}
+                        </span>
+                      )}
+                      {resa.offerId && (
+                        <span className="badge bg-warning text-dark">
+                          <i className="bi bi-gift me-1"></i>
+                          {refName(offers, resa.offerId) || "Offre"}
+                        </span>
+                      )}
+                      {resa.diningRoomId && (
+                        <span className="badge bg-dark">
+                          <i className="bi bi-door-open me-1"></i>
+                          {refName(rooms, resa.diningRoomId) || "Salle"}
+                        </span>
+                      )}
                       {resa.seatingPreference && (
                         <span className="badge bg-info text-dark">
                           <i className="bi bi-geo-alt me-1"></i>

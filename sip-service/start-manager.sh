@@ -51,5 +51,6 @@ if [ "$MODE" = "prod" ]; then
     exec node "$SCRIPT_DIR/dist/service-manager.js"
 else
     command -v npx >/dev/null 2>&1 || { echo "npx introuvable — installer Node.js"; exit 1; }
-    exec NODE_ENV=development npx tsx "$SCRIPT_DIR/service-manager.ts"
+    export NODE_ENV=development
+    exec npx tsx "$SCRIPT_DIR/service-manager.ts"
 fi

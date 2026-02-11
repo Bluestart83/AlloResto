@@ -64,6 +64,7 @@ interface Ctx {
   caller_phone: string;
   call_id: string | null;
   customer_id: string | null;
+  customer_name: string | null;
   call_start: Date;
   order_placed: boolean;
   reservation_placed: boolean;
@@ -80,6 +81,18 @@ interface Ctx {
   twilio_call_sid: string | null;
   bridge_call_sid: string | null;
   item_map: Record<string, { id: string; name: string }>;
+  phone_line_id: string | null;
+  ai_model: string | null;
+  ai_cost_margin_pct: number;
+  /** Restaurant currency (EUR, USD, etc.) */
+  currency: string;
+  /** Exchange rate from USD to restaurant currency */
+  exchange_rate_to_local: number;
+  // Token usage accumulators (summed across all response.done events)
+  input_tokens: number;
+  output_tokens: number;
+  input_audio_tokens: number;
+  output_audio_tokens: number;
 }
 
 type ToolHandler = (
@@ -110,6 +123,89 @@ function formatParisTime(date: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// ============================================================
+// AI PRICING CACHE — Fetched from Next.js, refreshed every 24h
+// ============================================================
+
+interface ModelRates {
+  textInput: number;   // USD per 1M tokens
+  textOutput: number;
+  audioInput: number;
+  audioOutput: number;
+}
+
+interface PricingData {
+  models: Record<string, ModelRates>;
+  telecomCostPerMin: number;
+  baseCurrency: string; // devise fournisseur IA (USD pour OpenAI)
+  fetchedAt: number; // Date.now()
+}
+
+let pricingCache: PricingData | null = null;
+const PRICING_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+// Fallback rates (USD per 1M tokens) if API is unreachable
+const FALLBACK_RATES: ModelRates = {
+  textInput: 4.00,
+  textOutput: 16.00,
+  audioInput: 32.00,
+  audioOutput: 64.00,
+};
+
+async function fetchPricing(): Promise<PricingData> {
+  try {
+    const resp = await fetch(`${NEXT_API_URL}/api/ai-pricing`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const result: PricingData = { models: data.models, telecomCostPerMin: data.telecomCostPerMin ?? 0.008, baseCurrency: data.baseCurrency || "USD", fetchedAt: Date.now() };
+      console.log(`[PRICING] Rates fetched (${Object.keys(data.models).length} models)`);
+      return result;
+    }
+  } catch (e) {
+    console.warn(`[PRICING] Fetch failed, using fallback: ${e}`);
+  }
+  return { models: { fallback: FALLBACK_RATES }, telecomCostPerMin: 0.008, baseCurrency: "USD", fetchedAt: Date.now() };
+}
+
+async function getPricing(): Promise<PricingData> {
+  if (!pricingCache || Date.now() - pricingCache.fetchedAt > PRICING_TTL_MS) {
+    pricingCache = await fetchPricing();
+  }
+  return pricingCache;
+}
+
+function getRatesForModel(pricing: PricingData, model: string | null): ModelRates {
+  if (model) {
+    // Exact match
+    if (pricing.models[model]) return pricing.models[model];
+    // Prefix match (e.g. "gpt-4o-realtime-preview-2024-12-17" → "gpt-4o-realtime-preview")
+    for (const [key, rates] of Object.entries(pricing.models)) {
+      if (model.startsWith(key)) return rates;
+    }
+  }
+  // Fallback: first model in cache, or hardcoded
+  return Object.values(pricing.models)[0] || FALLBACK_RATES;
+}
+
+function computeRawCost(
+  rates: ModelRates,
+  inputTokens: number,
+  outputTokens: number,
+  inputAudioTokens: number,
+  outputAudioTokens: number,
+): number {
+  const textIn = inputTokens - inputAudioTokens;
+  const textOut = outputTokens - outputAudioTokens;
+  return (
+    textIn * rates.textInput +
+    textOut * rates.textOutput +
+    inputAudioTokens * rates.audioInput +
+    outputAudioTokens * rates.audioOutput
+  ) / 1_000_000; // rates are per 1M tokens
 }
 
 // ============================================================
@@ -280,6 +376,7 @@ async function handleConfirmOrder(
     restaurantId: ctx.restaurant_id,
     callId: ctx.call_id,
     customerId: ctx.customer_id,
+    customerName: ctx.customer_name || null,
     customerPhone: ctx.caller_phone || "",
     total: args.total || 0,
     orderType,
@@ -397,6 +494,7 @@ async function handleSaveCustomer(
   try {
     const result = await apiPost("/api/customers", customerData);
     if (result.id) ctx.customer_id = result.id;
+    if (args.first_name) ctx.customer_name = args.first_name;
     return { success: true, message: "Informations client enregistrees" };
   } catch (e) {
     console.error(`Erreur sauvegarde client: ${e}`);
@@ -673,12 +771,49 @@ async function finalizeCall(ctx: Ctx): Promise<void> {
     }
   }
 
+  // 1. Calculer le coût IA brut en devise fournisseur (pricing.baseCurrency)
+  const pricing = await getPricing();
+  const providerCurrency = pricing.baseCurrency;
+  const rates = getRatesForModel(pricing, ctx.ai_model);
+  const rawAiCostProvider = computeRawCost(
+    rates,
+    ctx.input_tokens,
+    ctx.output_tokens,
+    ctx.input_audio_tokens,
+    ctx.output_audio_tokens,
+  );
+  // 2. Appliquer la marge restaurant
+  const costAiProvider = rawAiCostProvider * (1 + ctx.ai_cost_margin_pct / 100);
+
+  // 3. Coût télécom en devise fournisseur (pas de marge)
+  const costTelecomProvider = ctx.twilio_call_sid
+    ? duration / 60 * pricing.telecomCostPerMin
+    : 0;
+
+  // 4. Convertir en devise de facturation (BILLING_CURRENCY) avec taux BCE
+  const billingCurrency = process.env.NEXT_PUBLIC_BILLING_CURRENCY!;
+  const fx = ctx.exchange_rate_to_local; // providerCurrency → billingCurrency
+  const costAi = Math.round(costAiProvider * fx * 10000) / 10000;
+  const costTelecom = Math.round(costTelecomProvider * fx * 10000) / 10000;
+
   const updates: Record<string, any> = {
     id: callId,
     endedAt: now.toISOString(),
     durationSec: duration,
     outcome,
+    inputTokens: ctx.input_tokens,
+    outputTokens: ctx.output_tokens,
+    inputAudioTokens: ctx.input_audio_tokens,
+    outputAudioTokens: ctx.output_audio_tokens,
+    costAi,
+    costTelecom,
+    aiModel: ctx.ai_model,
+    costCurrency: billingCurrency,
   };
+
+  if (ctx.phone_line_id) {
+    updates.phoneLineId = ctx.phone_line_id;
+  }
 
   if (ctx.transcript?.length) {
     updates.transcript = ctx.transcript;
@@ -686,7 +821,7 @@ async function finalizeCall(ctx: Ctx): Promise<void> {
 
   try {
     await apiPatch("/api/calls", updates);
-    console.log(`Call ${callId} finalise (${duration}s, ${outcome})`);
+    console.log(`Call ${callId} finalise (${duration}s, ${outcome}, tokens=${ctx.input_tokens + ctx.output_tokens}, cost_ai=${costAi.toFixed(4)}${billingCurrency} [brut=${costAiProvider.toFixed(4)}${providerCurrency}, marge=${ctx.ai_cost_margin_pct}%, fx=${fx}], cost_tel=${costTelecom.toFixed(4)}${billingCurrency}, provider=openai)`);
   } catch (e) {
     console.error(`Erreur finalisation call: ${e}`);
   }
@@ -910,6 +1045,7 @@ server.register(async (app) => {
         caller_phone: "",
         call_id: null,
         customer_id: null,
+        customer_name: null,
         call_start: new Date(),
         order_placed: false,
         reservation_placed: false,
@@ -926,6 +1062,15 @@ server.register(async (app) => {
         twilio_call_sid: null,
         bridge_call_sid: null,
         item_map: {},
+        phone_line_id: null,
+        ai_cost_margin_pct: 30,
+        currency: process.env.NEXT_PUBLIC_BILLING_CURRENCY!,
+        exchange_rate_to_local: 1,
+        ai_model: null,
+        input_tokens: 0,
+        output_tokens: 0,
+        input_audio_tokens: 0,
+        output_audio_tokens: 0,
       };
 
       let aiConfig: Record<string, any> | null = null;
@@ -1073,6 +1218,27 @@ server.register(async (app) => {
           if (responseType === "error") {
             const err = response.error || response;
             console.error(`OpenAI ERROR detail: type=${err.type || "?"}, code=${err.code || "?"}, message=${err.message || JSON.stringify(err)}`);
+          }
+
+          // Capture model ID from session.created
+          if (responseType === "session.created") {
+            const model = response.session?.model;
+            if (model) {
+              ctx.ai_model = model;
+              console.log(`[SESSION] Model: ${model}`);
+            }
+          }
+
+          // Token usage tracking — accumulate from each response.done
+          if (responseType === "response.done") {
+            const usage = response.response?.usage;
+            if (usage) {
+              ctx.input_tokens += usage.input_tokens || 0;
+              ctx.output_tokens += usage.output_tokens || 0;
+              ctx.input_audio_tokens += usage.input_token_details?.audio_tokens || 0;
+              ctx.output_audio_tokens += usage.output_token_details?.audio_tokens || 0;
+              console.log(`[TOKENS] +${usage.total_tokens || 0} (in=${usage.input_tokens || 0}, out=${usage.output_tokens || 0}, audio_in=${usage.input_token_details?.audio_tokens || 0}, audio_out=${usage.output_token_details?.audio_tokens || 0}) | cumul: in=${ctx.input_tokens} out=${ctx.output_tokens}`);
+            }
           }
 
           // Audio delta → renvoyer à Twilio
@@ -1341,10 +1507,17 @@ server.register(async (app) => {
               ctx.item_map = aiConfig.itemMap || {};
               ctx.transfer_phone =
                 aiConfig.transferPhoneNumber || null;
+              ctx.ai_cost_margin_pct =
+                aiConfig.aiCostMarginPct ?? 30;
+              ctx.currency =
+                aiConfig.currency;
+              ctx.exchange_rate_to_local =
+                aiConfig.exchangeRateToLocal ?? 1;
 
               const customer = aiConfig.customerContext;
               if (customer) {
                 ctx.customer_id = customer.id || null;
+                ctx.customer_name = customer.firstName || null;
               }
             } catch (e) {
               console.error(

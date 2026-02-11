@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AppDataSource } from "@/db/data-source";
+import { getDb } from "@/lib/db";
 import { Reservation } from "@/db/entities/Reservation";
 import { Restaurant } from "@/db/entities/Restaurant";
-
-async function getDs() {
-  const ds = AppDataSource;
-  if (!ds.isInitialized) await ds.initialize();
-  return ds;
-}
+import { DiningService } from "@/db/entities/DiningService";
+import { syncReservationOutbound } from "@/services/sync/workers/outbound-sync.worker";
 
 // GET /api/reservations?restaurantId=X&date=YYYY-MM-DD&status=pending,confirmed
 export async function GET(req: NextRequest) {
   try {
-    const ds = await getDs();
+    const ds = await getDb();
     const { searchParams } = new URL(req.url);
     const restaurantId = searchParams.get("restaurantId");
 
@@ -60,7 +56,7 @@ export async function GET(req: NextRequest) {
 // POST /api/reservations — créer une réservation
 export async function POST(req: NextRequest) {
   try {
-    const ds = await getDs();
+    const ds = await getDb();
     const body = await req.json();
 
     if (!body.restaurantId || !body.customerPhone || !body.partySize || !body.reservationTime) {
@@ -83,9 +79,15 @@ export async function POST(req: NextRequest) {
     }
 
     const reservationTime = new Date(body.reservationTime);
-    const endTime = new Date(
-      reservationTime.getTime() + restaurant.avgMealDurationMin * 60000
-    );
+
+    // Durée : service > body > restaurant fallback
+    let durationMin = restaurant.avgMealDurationMin;
+    if (body.serviceId) {
+      const svc = await ds.getRepository(DiningService).findOneBy({ id: body.serviceId });
+      if (svc) durationMin = svc.defaultDurationMin;
+    }
+    if (body.durationMin) durationMin = body.durationMin;
+    const endTime = new Date(reservationTime.getTime() + durationMin * 60000);
 
     const repo = ds.getRepository(Reservation);
     const reservation = repo.create({
@@ -97,12 +99,23 @@ export async function POST(req: NextRequest) {
       partySize: body.partySize,
       reservationTime,
       endTime,
+      durationMin,
       status: body.status || "confirmed",
       seatingPreference: body.seatingPreference || null,
       notes: body.notes || null,
+      serviceId: body.serviceId || null,
+      offerId: body.offerId || null,
+      diningRoomId: body.diningRoomId || null,
+      tableIds: body.tableIds || null,
     } as Partial<Reservation>) as Reservation;
 
     const saved = await repo.save(reservation);
+
+    // Sync outbound (fire-and-forget)
+    syncReservationOutbound(saved, "create").catch((err) =>
+      console.error("[POST /api/reservations] outbound sync error:", err)
+    );
+
     return NextResponse.json(saved, { status: 201 });
   } catch (error: any) {
     console.error("POST /api/reservations error:", error);
@@ -116,7 +129,7 @@ export async function POST(req: NextRequest) {
 // PATCH /api/reservations — changer le status
 export async function PATCH(req: NextRequest) {
   try {
-    const ds = await getDs();
+    const ds = await getDb();
     const body = await req.json();
     const { id, status, notes } = body;
 
@@ -131,12 +144,23 @@ export async function PATCH(req: NextRequest) {
     if (status) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
     if (body.seatingPreference !== undefined) updates.seatingPreference = body.seatingPreference;
+    if (body.serviceId !== undefined) updates.serviceId = body.serviceId || null;
+    if (body.offerId !== undefined) updates.offerId = body.offerId || null;
+    if (body.diningRoomId !== undefined) updates.diningRoomId = body.diningRoomId || null;
+    if (body.tableIds !== undefined) updates.tableIds = body.tableIds || null;
 
     await ds.getRepository(Reservation).update(id, updates);
 
     const updated = await ds
       .getRepository(Reservation)
       .findOneBy({ id });
+
+    // Sync outbound (fire-and-forget, le worker gère le mastering)
+    if (updated) {
+      syncReservationOutbound(updated, "update").catch((err) =>
+        console.error("[PATCH /api/reservations] outbound sync error:", err)
+      );
+    }
 
     return NextResponse.json(updated);
   } catch (error: any) {

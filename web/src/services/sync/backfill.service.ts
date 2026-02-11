@@ -13,7 +13,7 @@ import { Reservation } from "@/db/entities/Reservation";
 import { Order } from "@/db/entities/Order";
 import { DiningTable } from "@/db/entities/DiningTable";
 import { Restaurant } from "@/db/entities/Restaurant";
-import { Service } from "@/db/entities/Service";
+import { DiningService } from "@/db/entities/DiningService";
 
 // ---------------------------------------------------------------------------
 // 4.1 + 4.2  Reservations & Orders : source field
@@ -93,7 +93,7 @@ function subtractMinutes(time: string, minutes: number): string {
 async function backfillServicesFromOpeningHours(): Promise<number> {
   const db = await getDb();
   const restaurantRepo = db.getRepository(Restaurant);
-  const serviceRepo = db.getRepository(Service);
+  const serviceRepo = db.getRepository(DiningService);
 
   const restaurants = await restaurantRepo.find();
   let created = 0;

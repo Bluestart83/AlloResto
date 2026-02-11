@@ -6,76 +6,149 @@
  */
 
 // ---------------------------------------------------------------------------
+// Types d'entités synchronisables
+// ---------------------------------------------------------------------------
+
+export type SyncEntityType =
+  | "reservation"
+  | "order"
+  | "menu_item"
+  | "offer"
+  | "menu"
+  | "table"
+  | "dining_room"
+  | "customer"
+  | "availability";
+
+// ---------------------------------------------------------------------------
 // DTOs
 // ---------------------------------------------------------------------------
 
 export interface ReservationSyncDTO {
-  /** Nom du client */
   customerName: string;
-  /** Téléphone du client */
   customerPhone: string;
-  /** Email du client (optionnel) */
   customerEmail?: string;
-  /** Nombre de couverts */
   partySize: number;
-  /** Adultes (optionnel, détail de partySize) */
   adults?: number;
-  /** Enfants */
   children?: number;
-  /** Date/heure de réservation (ISO 8601) */
   reservationTime: string;
-  /** Durée en minutes */
   durationMin?: number;
-  /** ID du service (mapping externe) */
   serviceExternalId?: string;
-  /** ID de la salle (mapping externe) */
   diningRoomExternalId?: string;
-  /** IDs des tables (mapping externe) */
   tableExternalIds?: string[];
-  /** ID de l'offre (mapping externe) */
   offerExternalId?: string;
-  /** Statut */
   status?: string;
-  /** Notes / demandes spéciales */
   notes?: string;
-  /** Allergies */
   allergies?: string[];
-  /** Restrictions alimentaires */
   dietaryRestrictions?: string[];
-  /** Occasion */
   occasion?: string;
 }
 
+export interface OrderSyncDTO {
+  status: string;
+  type: string;
+  customerName?: string;
+  customerPhone?: string;
+  deliveryAddress?: string;
+  items: {
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    options?: string[];
+  }[];
+  total: number;
+  estimatedReadyAt?: string;
+  notes?: string;
+}
+
+export interface MenuItemSyncDTO {
+  name: string;
+  description?: string;
+  price: number;
+  categoryName?: string;
+  isAvailable: boolean;
+  allergens?: string[];
+  imageUrl?: string;
+  options?: { label: string; priceModifier: number }[];
+}
+
+export interface OfferSyncDTO {
+  name: string;
+  description?: string;
+  price: number;
+  isAvailable: boolean;
+  /** Choix par étape (entrée, plat, dessert, etc.) */
+  steps: {
+    label: string;
+    /** Noms ou IDs des items éligibles */
+    itemRefs: string[];
+    /** Prix max (si filtrage par prix) */
+    maxPrice?: number;
+  }[];
+}
+
+export interface MenuSyncDTO {
+  categories: { name: string; sortOrder: number; items: MenuItemSyncDTO[] }[];
+  offers: OfferSyncDTO[];
+}
+
+export interface TableSyncDTO {
+  label: string;
+  seats: number;
+  diningRoomName?: string;
+  isActive: boolean;
+}
+
+export interface DiningRoomSyncDTO {
+  name: string;
+  capacity: number;
+  isActive: boolean;
+}
+
+export interface CustomerSyncDTO {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  locale?: string;
+  notes?: string;
+  allergies?: string[];
+  vipStatus?: boolean;
+  visitCount?: number;
+}
+
 export interface AvailabilitySlot {
-  /** Heure du créneau (HH:MM) */
   time: string;
-  /** Places restantes */
   remainingCovers: number;
-  /** ID du service sur la plateforme */
   serviceExternalId?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Webhook
+// ---------------------------------------------------------------------------
+
 export interface WebhookEvent {
-  /** Type d'événement */
   eventType:
     | "reservation.created"
     | "reservation.updated"
     | "reservation.cancelled"
     | "reservation.status_changed"
+    | "order.created"
+    | "order.updated"
+    | "order.cancelled"
+    | "menu.updated"
+    | "offer.updated"
+    | "table.updated"
     | "customer.updated"
     | "availability.changed";
-  /** ID externe de l'entité concernée */
   externalId: string;
-  /** Payload complet reçu de la plateforme */
   rawPayload: Record<string, any>;
-  /** Données parsées (selon le type) */
   data: Record<string, any>;
 }
 
 export interface SyncEntityResult {
-  /** ID externe attribué / mis à jour */
   externalId: string;
-  /** Payload brut retourné par la plateforme */
   rawData: Record<string, any>;
 }
 
@@ -84,50 +157,44 @@ export interface SyncEntityResult {
 // ---------------------------------------------------------------------------
 
 export interface PlatformConnector {
-  /** Identifiant de la plateforme (ex: "zenchef", "thefork") */
   readonly platform: string;
 
   // --- Auth ---
-
-  /**
-   * Initialise l'authentification avec les credentials stockés.
-   * Doit être appelé avant tout autre appel API.
-   */
   authenticate(credentials: Record<string, any>): Promise<void>;
 
   // --- Réservations ---
-
-  /** Crée une réservation sur la plateforme distante */
   createReservation(data: ReservationSyncDTO): Promise<SyncEntityResult>;
-
-  /** Met à jour une réservation existante */
-  updateReservation(
-    externalId: string,
-    data: Partial<ReservationSyncDTO>,
-  ): Promise<SyncEntityResult>;
-
-  /** Annule une réservation */
+  updateReservation(externalId: string, data: Partial<ReservationSyncDTO>): Promise<SyncEntityResult>;
   cancelReservation(externalId: string, reason?: string): Promise<void>;
 
+  // --- Commandes ---
+  syncOrder?(externalId: string, data: Partial<OrderSyncDTO>): Promise<SyncEntityResult>;
+
+  // --- Menu (items + offres/formules = carte complète) ---
+  pushMenu?(menu: MenuSyncDTO): Promise<{ items: SyncEntityResult[]; offers: SyncEntityResult[] }>;
+  pullMenu?(): Promise<MenuSyncDTO>;
+  pushMenuItems?(items: MenuItemSyncDTO[]): Promise<SyncEntityResult[]>;
+  pullMenuItems?(): Promise<{ externalId: string; data: MenuItemSyncDTO }[]>;
+  pushOffers?(offers: OfferSyncDTO[]): Promise<SyncEntityResult[]>;
+  pullOffers?(): Promise<{ externalId: string; data: OfferSyncDTO }[]>;
+
+  // --- Plan de salle ---
+  pushTables?(tables: TableSyncDTO[]): Promise<SyncEntityResult[]>;
+  pullTables?(): Promise<{ externalId: string; data: TableSyncDTO }[]>;
+  pushDiningRooms?(rooms: DiningRoomSyncDTO[]): Promise<SyncEntityResult[]>;
+  pullDiningRooms?(): Promise<{ externalId: string; data: DiningRoomSyncDTO }[]>;
+
+  // --- Clients ---
+  syncCustomer?(externalId: string | null, data: CustomerSyncDTO): Promise<SyncEntityResult>;
+  pullCustomers?(since?: Date): Promise<{ externalId: string; data: CustomerSyncDTO }[]>;
+
   // --- Disponibilités ---
-
-  /** Récupère les créneaux disponibles pour une date et taille de groupe */
   getAvailability(date: string, partySize: number): Promise<AvailabilitySlot[]>;
-
-  /** Push les disponibilités vers la plateforme (optionnel) */
   pushAvailability?(services: { externalId: string; slots: AvailabilitySlot[] }[]): Promise<void>;
 
-  // --- Entités mappées (plan de salle, services, offres) ---
-
-  /** Synchronise une entité locale vers la plateforme */
-  syncEntity(
-    type: string,
-    localData: Record<string, any>,
-    externalId?: string,
-  ): Promise<SyncEntityResult>;
+  // --- Générique (fallback) ---
+  syncEntity(type: string, localData: Record<string, any>, externalId?: string): Promise<SyncEntityResult>;
 
   // --- Webhooks ---
-
-  /** Parse et valide un webhook entrant de la plateforme */
   parseWebhook(headers: Record<string, string>, body: Record<string, any>): Promise<WebhookEvent>;
 }

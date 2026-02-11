@@ -3,13 +3,18 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import {
-  StatCard, PricingCard,
+  StatCard,
   HourlyChart, DistanceChart, WeeklyChart, OutcomeChart, TimeSavedCard,
   RecentCallsTable, TopCustomersTable,
 } from "@/components/dashboard";
-import type { PricingConfig } from "@/types";
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  EUR: "\u20AC", USD: "$", GBP: "\u00A3", CHF: "CHF",
+};
 
 interface StatsData {
+  displayCurrency: string;
+  displayFx: number;
   kpis: {
     totalCalls: number;
     totalOrders: number;
@@ -21,8 +26,11 @@ interface StatsData {
     totalDeliveries: number;
     totalMinutes: number;
     costToday: number;
+    costTodayAi: number;
+    costTodayTelecom: number;
     uniqueCallers: number;
     totalCustomers: number;
+    totalTokens: number;
   };
   hourlyData: { hour: number; calls: number; concurrent: number }[];
   weeklyData: { day: string; calls: number; orders: number; revenue: number; cost: number }[];
@@ -36,11 +44,6 @@ export default function RealDashboardPage() {
   const { restaurantId } = useParams<{ restaurantId: string }>();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pricing, setPricing] = useState<PricingConfig>({
-    monthlyCost: 49.90,
-    perMinute: 0.12,
-    currency: "€",
-  });
 
   useEffect(() => {
     fetch(`/api/stats?restaurantId=${restaurantId}`)
@@ -58,6 +61,8 @@ export default function RealDashboardPage() {
   }
 
   const { kpis } = stats;
+  const sym = CURRENCY_SYMBOLS[stats.displayCurrency] || stats.displayCurrency;
+
   const avgDurationStr = kpis.avgCallDuration > 0
     ? `${Math.floor(kpis.avgCallDuration / 60)}:${String(kpis.avgCallDuration % 60).padStart(2, "0")}`
     : "0:00";
@@ -88,7 +93,7 @@ export default function RealDashboardPage() {
           <StatCard icon="bi-bag-check" iconBg="#d1fae5" label="Commandes" value={kpis.totalOrders} subtitle={`${kpis.conversionRate}% conversion`} />
         </div>
         <div className="col-6 col-lg-3">
-          <StatCard icon="bi-currency-euro" iconBg="#fef3c7" label="CA du jour" value={`${kpis.totalRevenue.toFixed(2)}\u20ac`} subtitle={kpis.totalCalls > 0 ? `${(kpis.totalRevenue / kpis.totalCalls).toFixed(2)}\u20ac/appel` : undefined} />
+          <StatCard icon="bi-currency-euro" iconBg="#fef3c7" label="CA du jour" value={`${kpis.totalRevenue.toFixed(2)}${sym}`} subtitle={kpis.totalCalls > 0 ? `${(kpis.totalRevenue / kpis.totalCalls).toFixed(2)}${sym}/appel` : undefined} />
         </div>
         <div className="col-6 col-lg-3">
           <StatCard icon="bi-reception-4" iconBg="#ede9fe" label="Simultan&eacute;s max" value={kpis.maxConcurrent} />
@@ -111,9 +116,20 @@ export default function RealDashboardPage() {
         </div>
       </div>
 
-      {/* Pricing */}
-      <div className="mb-4">
-        <PricingCard pricing={pricing} onPricingChange={setPricing} totalMinutes={kpis.totalMinutes} totalRevenue={kpis.totalRevenue} />
+      {/* Costs — already converted to restaurant currency by API */}
+      <div className="row g-3 mb-4">
+        <div className="col-6 col-lg-3">
+          <StatCard icon="bi-cash-stack" iconBg="#fef3c7" label="Co&ucirc;t IA" value={`${kpis.costTodayAi.toFixed(2)}${sym}`} subtitle={`${kpis.totalTokens > 0 ? `${(kpis.totalTokens / 1000).toFixed(1)}k tokens` : "0 tokens"}`} />
+        </div>
+        <div className="col-6 col-lg-3">
+          <StatCard icon="bi-telephone" iconBg="#e0f2fe" label="Co&ucirc;t t&eacute;l&eacute;com" value={`${kpis.costTodayTelecom.toFixed(2)}${sym}`} subtitle={`${kpis.totalMinutes} min`} />
+        </div>
+        <div className="col-6 col-lg-3">
+          <StatCard icon="bi-wallet2" iconBg="#ede9fe" label="Co&ucirc;t total" value={`${kpis.costToday.toFixed(2)}${sym}`} subtitle={kpis.totalCalls > 0 ? `${(kpis.costToday / kpis.totalCalls).toFixed(3)}${sym}/appel` : undefined} />
+        </div>
+        <div className="col-6 col-lg-3">
+          <StatCard icon="bi-graph-up-arrow" iconBg="#d1fae5" label="Marge" value={kpis.totalRevenue > 0 ? `${((1 - kpis.costToday / kpis.totalRevenue) * 100).toFixed(0)}%` : "\u2014"} subtitle={`CA: ${kpis.totalRevenue.toFixed(2)}${sym}`} />
+        </div>
       </div>
 
       {/* Charts Row 1 */}

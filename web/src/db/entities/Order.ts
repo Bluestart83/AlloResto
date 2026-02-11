@@ -13,6 +13,7 @@ import type { Restaurant } from "./Restaurant";
 import type { Call } from "./Call";
 import type { Customer } from "./Customer";
 import type { OrderItem } from "./OrderItem";
+import type { DeliveryTrip } from "./DeliveryTrip";
 
 export type OrderStatus =
   | "pending"
@@ -126,6 +127,14 @@ export class Order {
 
   @Column({ name: "handoff_at", type: "datetime", nullable: true })
   handoffAt!: Date | null;
+
+  // --- Tournée de livraison ---
+  @Column({ name: "trip_id", type: "varchar", nullable: true })
+  tripId!: string | null;
+
+  @ManyToOne("DeliveryTrip", { nullable: true })
+  @JoinColumn({ name: "trip_id" })
+  trip!: DeliveryTrip | null;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
