@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { ROLE_ADMIN } from "@/lib/roles";
 import PlaceLayoutClient from "./PlaceLayoutClient";
 
 interface Props {
@@ -16,7 +17,7 @@ export default async function PlaceLayout({ children, params }: Props) {
 
   // Restaurant users can only access their own restaurant
   const user = session.user as Record<string, unknown>;
-  if (user.role !== "admin" && user.restaurantId !== restaurantId) {
+  if (user.role !== ROLE_ADMIN && user.restaurantId !== restaurantId) {
     redirect("/login");
   }
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "@/lib/auth-client";
+import { ROLE_ADMIN } from "@/lib/roles";
 
 interface SidebarProps {
   restaurantId?: string;
@@ -14,7 +15,7 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
   const router = useRouter();
   const { data: session } = useSession();
 
-  const isAdmin = session?.user?.role === "admin";
+  const isAdmin = session?.user?.role === ROLE_ADMIN;
 
   const baseItems = [
     { href: "/admin/customers", icon: "bi-people", label: "Clients" },

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
+import { ROLE_ADMIN } from "@/lib/roles";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
@@ -35,7 +36,7 @@ export default function LoginForm() {
 
     // Redirect based on role
     const user = data.user as Record<string, unknown>;
-    if (user.role === "admin") {
+    if (user.role === ROLE_ADMIN) {
       router.push("/admin/customers");
     } else if (user.restaurantId) {
       router.push(`/place/${user.restaurantId}/dashboard`);

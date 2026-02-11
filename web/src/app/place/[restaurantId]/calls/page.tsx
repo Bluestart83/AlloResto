@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { useParams } from "next/navigation";
+import { useSession } from "@/lib/auth-client";
+import { ROLE_ADMIN } from "@/lib/roles";
 import { formatPhoneDisplay } from "@/lib/format-phone";
 
 const OUTCOME_LABELS: Record<string, { label: string; bg: string; icon: string }> = {
@@ -41,6 +43,8 @@ function formatTokens(n: number | null | undefined) {
 
 export default function CallsPage() {
   const { restaurantId } = useParams<{ restaurantId: string }>();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === ROLE_ADMIN;
   const [calls, setCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -137,18 +141,18 @@ export default function CallsPage() {
           <h4 className="fw-bold mb-1">Appels</h4>
           <small className="text-muted">
             {filteredCalls.length} appel(s)
-            {totalTokens > 0 && (
+            {isAdmin && totalTokens > 0 && (
               <span className="badge bg-dark ms-2">
                 {formatTokens(totalTokens)} tokens
               </span>
             )}
-            {totalCost > 0 && (
+            {isAdmin && totalCost > 0 && (
               <>
                 <span className="badge bg-info ms-1" title="Cout total (IA + telecom)">
                   {totalCost.toFixed(2)}{sym}
                 </span>
-                <span className="badge bg-secondary ms-1" title="Dont IA">
-                  IA: {totalCostAi.toFixed(2)}{sym}
+                <span className="badge bg-secondary ms-1" title="Dont tokens IA">
+                  Tokens IA: {totalCostAi.toFixed(2)}{sym}
                 </span>
                 <span className="badge bg-secondary ms-1" title="Dont telecom">
                   Tel: {totalCostTelecom.toFixed(2)}{sym}
@@ -206,7 +210,7 @@ export default function CallsPage() {
                 <th>Numero</th>
                 <th>Client</th>
                 <th>Duree</th>
-                <th>Cout</th>
+                {isAdmin && <th>Cout</th>}
                 <th>Resultat</th>
                 <th></th>
               </tr>
@@ -253,9 +257,11 @@ export default function CallsPage() {
                         )}
                       </td>
                       <td>{formatDuration(call.durationSec)}</td>
-                      <td>
-                        <small>{formatCost(callCost, sym)}</small>
-                      </td>
+                      {isAdmin && (
+                        <td>
+                          <small>{formatCost(callCost, sym)}</small>
+                        </td>
+                      )}
                       <td>
                         <span className={`badge ${oc.bg}`}>
                           <i className={`bi ${oc.icon} me-1`}></i>
@@ -270,15 +276,15 @@ export default function CallsPage() {
                     </tr>
                     {expanded && (
                       <tr>
-                        <td colSpan={7} className="bg-dark bg-opacity-25 p-3">
-                          {/* Cost & token detail */}
-                          {(call.inputTokens > 0 || call.outputTokens > 0) && (() => {
+                        <td colSpan={isAdmin ? 7 : 6} className="bg-dark bg-opacity-25 p-3">
+                          {/* Cost & token detail (admin only) */}
+                          {isAdmin && (call.inputTokens > 0 || call.outputTokens > 0) && (() => {
                             const costAi = (Number(call.costAi) || 0) * fx;
                             const costTel = (Number(call.costTelecom) || 0) * fx;
                             return (
                             <div className="mb-3 d-flex gap-4 flex-wrap" style={{ fontSize: "0.8rem" }}>
                               <div>
-                                <span className="text-muted">Cout IA : </span>
+                                <span className="text-muted">Cout tokens IA : </span>
                                 <span>{costAi.toFixed(4)}{sym}</span>
                               </div>
                               {costTel > 0 && (
