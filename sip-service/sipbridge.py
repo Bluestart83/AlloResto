@@ -844,6 +844,15 @@ class _WsSession:
                     ts_ms += self.audio_cfg.frame_ms
                 else:
                     await asyncio.sleep(poll_interval)
+
+                # Check for marks whose audio has been fully played through SIP
+                ready_marks = self.audio_port.get_ready_marks()
+                for mark_name in ready_marks:
+                    logger.debug(f"[{self._tag}] sip→ws: mark '{mark_name}' echo (audio consumed)")
+                    await ws.send(json.dumps({
+                        "event": "mark",
+                        "mark": {"name": mark_name},
+                    }))
         except Exception as e:
             if self._alive:
                 logger.error(f"[{self._tag}] sip→ws: {e}")
@@ -878,13 +887,15 @@ class _WsSession:
 
                 elif event == "mark":
                     mark_name = data.get("mark", {}).get("name", "")
-                    logger.debug(f"[{self._tag}] ws→sip: mark '{mark_name}' — echo back")
-                    # Renvoyer le mark pour confirmer le playback
-                    # (l'audio précédent a déjà été injecté dans le buffer SIP)
-                    await ws.send(json.dumps({
-                        "event": "mark",
-                        "mark": {"name": mark_name},
-                    }))
+                    if self.audio_port:
+                        self.audio_port.queue_mark(mark_name)
+                    else:
+                        # No audio port — echo immediately as fallback
+                        logger.debug(f"[{self._tag}] ws→sip: mark '{mark_name}' — no audio_port, echo immediately")
+                        await ws.send(json.dumps({
+                            "event": "mark",
+                            "mark": {"name": mark_name},
+                        }))
 
                 else:
                     logger.info(f"[{self._tag}] ws→sip: unknown event '{event}'")
@@ -919,6 +930,10 @@ if HAS_PJSIP:
             self._rx_queue: queue.Queue[bytes] = queue.Queue()
             self._tx_buffer = b""
             self._tx_lock = threading.Lock()
+            # Deferred mark echo — track how much audio has been fed vs consumed
+            self._tx_total_fed: int = 0       # bytes appended via feed_audio()
+            self._tx_total_consumed: int = 0  # bytes sent to SIP via onFrameRequested()
+            self._pending_marks: list[tuple[str, int]] = []  # (mark_name, trigger_at_byte)
 
         # NO __del__ — calling pjsip methods from a destructor is unsafe:
         # 1. If triggered during a pjsip audio callback → reentrant mutex → SIGSEGV
@@ -940,6 +955,7 @@ if HAS_PJSIP:
                 if len(self._tx_buffer) >= needed:
                     chunk = self._tx_buffer[:needed]
                     self._tx_buffer = self._tx_buffer[needed:]
+                    self._tx_total_consumed += needed
                 else:
                     chunk = b"\x00" * needed
 
@@ -960,11 +976,36 @@ if HAS_PJSIP:
             """Push audio for playback (us → SIP)."""
             with self._tx_lock:
                 self._tx_buffer += pcm
+                self._tx_total_fed += len(pcm)
 
         def clear_audio(self):
-            """Clear playback buffer (barge-in)."""
+            """Clear playback buffer (barge-in). Also discards pending marks."""
             with self._tx_lock:
                 self._tx_buffer = b""
+                self._pending_marks.clear()
+
+        def queue_mark(self, mark_name: str):
+            """Queue a mark to be echoed when all preceding audio has been played."""
+            with self._tx_lock:
+                trigger_at = self._tx_total_fed
+                self._pending_marks.append((mark_name, trigger_at))
+                logger.debug(
+                    f"[{self.call_sid[:8]}] mark '{mark_name}' queued at byte {trigger_at} "
+                    f"(consumed={self._tx_total_consumed}, buffered={len(self._tx_buffer)})"
+                )
+
+        def get_ready_marks(self) -> list[str]:
+            """Return marks whose audio has been fully consumed by SIP."""
+            ready = []
+            with self._tx_lock:
+                remaining = []
+                for name, trigger_at in self._pending_marks:
+                    if self._tx_total_consumed >= trigger_at:
+                        ready.append(name)
+                    else:
+                        remaining.append((name, trigger_at))
+                self._pending_marks = remaining
+            return ready
 
 
     class _SipCallHandler(pj.Call):
