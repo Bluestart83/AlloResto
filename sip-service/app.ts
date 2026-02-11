@@ -36,7 +36,8 @@ const PORT = parseInt(process.env.PORT || "5050", 10);
 const NEXT_API_URL = process.env.NEXT_API_URL || "http://localhost:3000";
 const RESTAURANT_ID = process.env.RESTAURANT_ID || "";
 const MAX_CALL_DURATION = parseInt(process.env.MAX_CALL_DURATION || "600", 10); // 10 min par défaut
-const HANGUP_DELAY_S = 0.3; // délai avant envoi du stop après end_call (buffer réseau)
+const HANGUP_DELAY_S = 0.5; // petit buffer réseau après confirmation playback
+const MARK_DRAIN_TIMEOUT_MS = 8000; // timeout max pour attendre les marks (playback audio)
 
 // VAD (Voice Activity Detection) — OpenAI Realtime turn detection
 const VAD_THRESHOLD = parseFloat(process.env.VAD_THRESHOLD || "0.5"); // 0.0-1.0 sensibilité
@@ -935,6 +936,8 @@ server.register(async (app) => {
       let responseStartTimestampTwilio: number | null = null;
       let openaiWs: WebSocket | null = null;
       let finished = false;
+      let pendingHangupResolve: (() => void) | null = null;
+      let muteClient = false; // stop forwarding client audio after end_call
 
       // Connexion à OpenAI Realtime API
       const openaiWsUrl =
@@ -973,6 +976,26 @@ server.register(async (app) => {
             socket.close();
           }
         } catch {}
+      }
+
+      // Attendre que tous les marks soient acquittés (= audio joué côté Twilio/Bridge)
+      function waitForMarksToComplete(): Promise<void> {
+        if (markQueue.length === 0) {
+          console.log(`[HANGUP] Pas de marks en attente — audio deja joue`);
+          return Promise.resolve();
+        }
+        console.log(`[HANGUP] Attente fin playback (${markQueue.length} marks en attente)...`);
+        return new Promise((resolve) => {
+          pendingHangupResolve = resolve;
+          // Timeout de sécurité si les marks ne reviennent jamais
+          setTimeout(() => {
+            if (pendingHangupResolve) {
+              console.log(`[HANGUP] Timeout ${MARK_DRAIN_TIMEOUT_MS}ms — marks non acquittes (reste ${markQueue.length}), on raccroche quand meme`);
+              pendingHangupResolve = null;
+              resolve();
+            }
+          }, MARK_DRAIN_TIMEOUT_MS);
+        });
       }
 
       function sendSessionUpdate() {
@@ -1102,7 +1125,8 @@ server.register(async (app) => {
           }
 
           // Interruption — le client parle pendant que l'IA répond
-          if (responseType === "input_audio_buffer.speech_started") {
+          // (ignoré après end_call pour ne pas couper l'audio de fin)
+          if (responseType === "input_audio_buffer.speech_started" && !muteClient) {
             console.log("Client interrompt l'IA");
             if (
               markQueue.length &&
@@ -1144,13 +1168,21 @@ server.register(async (app) => {
             responseType ===
             "response.function_call_arguments.done"
           ) {
+            const fnName = response.name || "";
+
+            // end_call / transfer_call: couper micro + bloquer interruptions AVANT l'await
+            // (sinon speech_started peut fire pendant handleFunctionCall et clear l'audio)
+            if (fnName === "end_call" || fnName === "transfer_call") {
+              muteClient = true;
+              console.log(`[HANGUP] ${fnName} — micro client coupe, interruptions bloquees`);
+            }
+
             await handleFunctionCall(response, openaiWs!, ctx);
 
-            // end_call: hangup direct (pas de response.create → pas de audio.done)
+            // end_call: attendre fin playback audio IA
             if (ctx.should_hangup && !ctx.transferred) {
-              console.log(
-                `[HANGUP] end_call — delai ${HANGUP_DELAY_S}s avant fermeture`,
-              );
+              console.log(`[HANGUP] end_call — attente fin playback audio...`);
+              await waitForMarksToComplete();
               await sleep(HANGUP_DELAY_S);
               console.log(`[HANGUP] Finalisation appel...`);
               await finalizeCall(ctx);
@@ -1184,17 +1216,14 @@ server.register(async (app) => {
             markQueue.push("responsePart");
             responseStartTimestampTwilio = null;
 
-            // Auto-hangup: déclenché par end_call ou transfer_call
+            // Auto-hangup: déclenché par transfer_call (end_call passe par function_call_arguments.done)
             if (ctx.should_hangup) {
               if (ctx.transferred) {
                 console.log(
                   `[HANGUP] Transfer vers ${ctx.transfer_phone} (raison: ${ctx.transfer_reason})`,
                 );
+                await waitForMarksToComplete();
                 await executeTransfer(ctx, socket as any, streamSid!);
-              } else {
-                console.log(
-                  `[HANGUP] end_call — delai ${HANGUP_DELAY_S}s avant fermeture`,
-                );
               }
               await sleep(HANGUP_DELAY_S);
               console.log(`[HANGUP] Finalisation appel...`);
@@ -1246,12 +1275,16 @@ server.register(async (app) => {
               msg.media.timestamp,
               10,
             );
-            openaiWs.send(
-              JSON.stringify({
-                type: "input_audio_buffer.append",
-                audio: msg.media.payload,
-              }),
-            );
+            // Après end_call, ne plus envoyer l'audio client à OpenAI
+            // pour éviter que le VAD relance une conversation
+            if (!muteClient) {
+              openaiWs.send(
+                JSON.stringify({
+                  type: "input_audio_buffer.append",
+                  audio: msg.media.payload,
+                }),
+              );
+            }
           } else if (msg.event === "start") {
             streamSid = msg.start.streamSid;
             console.log(`Stream demarre: ${streamSid}`);
@@ -1367,6 +1400,13 @@ server.register(async (app) => {
           } else if (msg.event === "mark") {
             if (markQueue.length) {
               markQueue.shift();
+            }
+            // Si on attend la fin du playback pour raccrocher
+            if (pendingHangupResolve && markQueue.length === 0) {
+              console.log(`[HANGUP] Tous les marks acquittes — audio termine`);
+              const resolve = pendingHangupResolve;
+              pendingHangupResolve = null;
+              resolve();
             }
           } else if (msg.event === "stop") {
             const elapsed = Math.floor((Date.now() - ctx.call_start.getTime()) / 1000);

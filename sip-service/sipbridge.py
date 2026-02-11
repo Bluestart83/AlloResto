@@ -400,17 +400,18 @@ class SipBridge:
             self._endpoint = None
             logger.info("PJSIP arrêté")
 
-    _poll_thread_registered = False
+    _registered_thread_ids: set = set()
 
     def pjsip_poll(self):
         if self._endpoint:
-            if not self._poll_thread_registered:
+            tid = threading.get_ident()
+            if tid not in self._registered_thread_ids:
                 try:
-                    self._endpoint.libRegisterThread("poll")
-                    self._poll_thread_registered = True
-                    logger.debug("pjsip_poll: thread registered")
+                    self._endpoint.libRegisterThread(f"poll-{tid}")
+                    self._registered_thread_ids.add(tid)
+                    logger.debug(f"pjsip_poll: thread {tid} registered")
                 except Exception as e:
-                    logger.warning(f"pjsip_poll: libRegisterThread failed: {e}")
+                    logger.warning(f"pjsip_poll: libRegisterThread {tid} failed: {e}")
             self._endpoint.libHandleEvents(10)
 
     # ── FastAPI ────────────────────────────────────────────
@@ -648,12 +649,15 @@ class SipBridge:
 
             # Quick hangup of active calls (no libDestroy!)
             def _hangup_calls():
-                try:
-                    if self._endpoint:
-                        self._endpoint.libRegisterThread("cleanup")
-                        logger.info("[CLEANUP] Thread registered for cleanup")
-                except Exception as e:
-                    logger.warning(f"[CLEANUP] libRegisterThread failed: {e}")
+                tid = threading.get_ident()
+                if tid not in self._registered_thread_ids:
+                    try:
+                        if self._endpoint:
+                            self._endpoint.libRegisterThread(f"cleanup-{tid}")
+                            self._registered_thread_ids.add(tid)
+                            logger.info(f"[CLEANUP] Thread {tid} registered for cleanup")
+                    except Exception as e:
+                        logger.warning(f"[CLEANUP] libRegisterThread {tid} failed: {e}")
                 active = [(sid, r) for sid, r in self.active_calls.items()
                           if r._call_ref and r.status not in (
                               CallStatus.COMPLETED, CallStatus.FAILED, CallStatus.CANCELLED)]
@@ -775,11 +779,14 @@ class _WsSession:
                 logger.info(f"[{self._tag}] WS session ended — sending SIP BYE (hangup)")
                 def _hangup_sip():
                     import time
-                    try:
-                        self.bridge._endpoint.libRegisterThread("ws-hangup")
-                        logger.debug(f"[{self.call_sid[:8]}] ws-hangup thread registered")
-                    except Exception as e:
-                        logger.warning(f"[{self.call_sid[:8]}] ws-hangup libRegisterThread failed: {e}")
+                    tid = threading.get_ident()
+                    if tid not in self.bridge._registered_thread_ids:
+                        try:
+                            self.bridge._endpoint.libRegisterThread(f"hangup-{tid}")
+                            self.bridge._registered_thread_ids.add(tid)
+                            logger.debug(f"[{self.call_sid[:8]}] hangup thread {tid} registered")
+                        except Exception as e:
+                            logger.warning(f"[{self.call_sid[:8]}] hangup libRegisterThread {tid} failed: {e}")
                     try:
                         prm = pj.CallOpParam()
                         record._call_ref.hangup(prm)
@@ -859,7 +866,14 @@ class _WsSession:
                     break
 
                 elif event == "mark":
-                    logger.debug(f"[{self._tag}] ws→sip: mark")
+                    mark_name = data.get("mark", {}).get("name", "")
+                    logger.debug(f"[{self._tag}] ws→sip: mark '{mark_name}' — echo back")
+                    # Renvoyer le mark pour confirmer le playback
+                    # (l'audio précédent a déjà été injecté dans le buffer SIP)
+                    await ws.send(json.dumps({
+                        "event": "mark",
+                        "mark": {"name": mark_name},
+                    }))
 
                 else:
                     logger.info(f"[{self._tag}] ws→sip: unknown event '{event}'")
