@@ -919,33 +919,13 @@ if HAS_PJSIP:
             self._rx_queue: queue.Queue[bytes] = queue.Queue()
             self._tx_buffer = b""
             self._tx_lock = threading.Lock()
-            self._port_active = True
 
-        def __del__(self):
-            """Prevent C++ destructor from crashing on unregistered thread.
-
-            ALWAYS set thisown=0 so SWIG never calls the C++ destructor.
-            The C++ port is already unregistered from onCallState(DISCONNECTED).
-            """
-            # If port still active (abnormal path), try to unregister properly
-            if self._port_active:
-                try:
-                    tid = threading.get_ident()
-                    if tid not in SipBridge._registered_thread_ids:
-                        ep = pj.Endpoint.instance()
-                        ep.libRegisterThread(f"port-gc-{tid}")
-                        SipBridge._registered_thread_ids.add(tid)
-                    self.unregisterMediaPort()
-                except Exception:
-                    pass
-                self._port_active = False
-            # ALWAYS disown — the C++ side was already cleaned up in
-            # onCallState or just above. This prevents SwigPyObject_dealloc
-            # from calling the C++ destructor (which would SIGABRT).
-            try:
-                self.thisown = 0
-            except Exception:
-                pass
+        # NO __del__ — calling pjsip methods from a destructor is unsafe:
+        # 1. If triggered during a pjsip audio callback → reentrant mutex → SIGSEGV
+        # 2. If triggered from GC on unregistered thread → pj_thread_this → SIGABRT
+        # Instead, explicit cleanup in onCallState(DISCONNECTED) calls
+        # unregisterMediaPort() from the pjsip thread, which sets
+        # id = PJSUA_INVALID_ID. The C++ destructor then becomes a no-op.
 
         def onFrameReceived(self, frame):
             """Called by PJSIP when audio arrives from remote party."""
@@ -1060,19 +1040,15 @@ if HAS_PJSIP:
                         )
                     )
 
-                # Nettoyer l'audio port depuis le thread pjsip (enregistré)
-                # pour éviter que le GC Python le détruise depuis un thread
-                # non-enregistré → crash pj_thread_this() assertion
+                # Unregister audio port from conf bridge (from pjsip thread).
+                # This sets C++ id = PJSUA_INVALID_ID, making the C++
+                # destructor a no-op when Python GC later collects the wrapper.
                 if self.audio_port:
                     try:
                         self.audio_port.unregisterMediaPort()
+                        logger.info(f"[{self.call_sid[:8]}] AudioPort unregistered from conf bridge")
                     except Exception as e:
-                        logger.warning(f"[{self.call_sid[:8]}] AudioPort cleanup: {e}")
-                    self.audio_port._port_active = False
-                    try:
-                        self.audio_port.thisown = 0
-                    except Exception:
-                        pass
+                        logger.error(f"[{self.call_sid[:8]}] AudioPort unregisterMediaPort FAILED: {e}")
                     self.audio_port = None
                 if self.session:
                     self.session.audio_port = None
