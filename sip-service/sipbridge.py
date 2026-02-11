@@ -919,6 +919,31 @@ if HAS_PJSIP:
             self._rx_queue: queue.Queue[bytes] = queue.Queue()
             self._tx_buffer = b""
             self._tx_lock = threading.Lock()
+            self._port_active = True
+
+        def __del__(self):
+            """Safe destructor: register thread with pjsip before C++ cleanup.
+
+            Python can destroy this object from ANY thread (GC, refcount drop,
+            asyncio Task cleanup, exception traceback chain, etc.). The C++
+            destructor calls unregisterMediaPort() → pj_mutex_lock() →
+            pj_thread_this() which asserts if the thread isn't registered.
+            """
+            if not self._port_active:
+                return
+            try:
+                tid = threading.get_ident()
+                if tid not in SipBridge._registered_thread_ids:
+                    ep = pj.Endpoint.instance()
+                    ep.libRegisterThread(f"port-gc-{tid}")
+                    SipBridge._registered_thread_ids.add(tid)
+            except Exception:
+                pass
+            try:
+                self.unregisterMediaPort()
+            except Exception:
+                pass
+            self._port_active = False
 
         def onFrameReceived(self, frame):
             """Called by PJSIP when audio arrives from remote party."""
@@ -1041,6 +1066,7 @@ if HAS_PJSIP:
                         self.audio_port.unregisterMediaPort()
                     except Exception as e:
                         logger.warning(f"[{self.call_sid[:8]}] AudioPort cleanup: {e}")
+                    self.audio_port._port_active = False
                     self.audio_port = None
                 if self.session:
                     self.session.audio_port = None
