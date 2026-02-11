@@ -8,14 +8,17 @@
     "start": "next start",
     "lint": "next lint",
     "typeorm": "typeorm-ts-node-commonjs",
-    "db:sync": "ts-node src/db/sync.ts"
+    "db:sync": "ts-node src/db/sync.ts",
+    "db:seed-admin": "tsx src/scripts/seed-admin.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
+    "better-auth": "^1.4.18",
+    "better-sqlite3": "^12.6.2",
     "bootstrap": "^5.3.3",
     "bootstrap-icons": "^1.11.3",
     "chart.js": "^4.4.7",
     "next": "^16.1.6",
+    "nodemailer": "^8.0.1",
     "openai": "^4.77.0",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.2.0",
@@ -26,6 +29,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^7.0.9",
     "@types/react": "^18.3.14",
     "@types/react-dom": "^18.3.3",
     "typescript": "^5.7.0"

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useSession, signOut } from "@/lib/auth-client";
 
 interface SidebarProps {
   restaurantId?: string;
@@ -10,6 +11,10 @@ interface SidebarProps {
 
 export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { data: session } = useSession();
+
+  const isAdmin = session?.user?.role === "admin";
 
   const baseItems = [
     { href: "/admin/customers", icon: "bi-people", label: "Clients" },
@@ -41,11 +46,21 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
     return pathname.startsWith(href);
   };
 
+  function handleLogout() {
+    signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push("/login");
+        },
+      },
+    });
+  }
+
   return (
     <div className="sidebar d-flex flex-column">
       {/* Logo */}
       <div className="px-3 py-4 border-bottom border-dark">
-        <Link href="/admin/customers" className="text-decoration-none">
+        <Link href={isAdmin ? "/admin/customers" : "/"} className="text-decoration-none">
           <div className="d-flex align-items-center gap-2">
             <div
               className="d-flex align-items-center justify-content-center rounded-3"
@@ -105,24 +120,28 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
             <hr className="border-dark mx-3 my-1" />
           </>
         )}
-        <div className="px-3 mb-1 mt-2">
-          <small className="text-secondary text-uppercase" style={{ fontSize: "0.65rem", letterSpacing: "0.05em" }}>
-            Admin
-          </small>
-        </div>
-        <ul className="nav flex-column">
-          {baseItems.map((item) => (
-            <li className="nav-item" key={item.href}>
-              <Link
-                href={item.href}
-                className={`nav-link d-flex align-items-center ${isActive(item.href) ? "active" : ""}`}
-              >
-                <i className={`bi ${item.icon}`}></i>
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {isAdmin && (
+          <>
+            <div className="px-3 mb-1 mt-2">
+              <small className="text-secondary text-uppercase" style={{ fontSize: "0.65rem", letterSpacing: "0.05em" }}>
+                Admin
+              </small>
+            </div>
+            <ul className="nav flex-column">
+              {baseItems.map((item) => (
+                <li className="nav-item" key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={`nav-link d-flex align-items-center ${isActive(item.href) ? "active" : ""}`}
+                  >
+                    <i className={`bi ${item.icon}`}></i>
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </nav>
 
       {/* Footer */}
@@ -132,6 +151,12 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
             {restaurantName}
           </div>
         )}
+        {session?.user && (
+          <div className="text-secondary mb-2" style={{ fontSize: "0.7rem" }}>
+            <i className="bi bi-person-circle me-1"></i>
+            {session.user.name || session.user.email}
+          </div>
+        )}
         <Link
           href={restaurantId ? `/place/${restaurantId}/settings` : "/admin/settings"}
           className="nav-link px-0 py-1"
@@ -139,6 +164,20 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
         >
           <i className="bi bi-gear me-1"></i>Paramètres
         </Link>
+        <Link
+          href="/account/password"
+          className="nav-link px-0 py-1"
+          style={{ fontSize: "0.8rem" }}
+        >
+          <i className="bi bi-key me-1"></i>Changer mot de passe
+        </Link>
+        <button
+          onClick={handleLogout}
+          className="nav-link px-0 py-1 border-0 bg-transparent text-start w-100"
+          style={{ fontSize: "0.8rem", color: "#9ca3af" }}
+        >
+          <i className="bi bi-box-arrow-left me-1"></i>Déconnexion
+        </button>
       </div>
     </div>
   );

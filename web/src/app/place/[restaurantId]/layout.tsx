@@ -1,27 +1,28 @@
-"use client";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import PlaceLayoutClient from "./PlaceLayoutClient";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Sidebar from "@/components/ui/Sidebar";
+interface Props {
+  children: React.ReactNode;
+  params: Promise<{ restaurantId: string }>;
+}
 
-export default function PlaceLayout({ children }: { children: React.ReactNode }) {
-  const { restaurantId } = useParams<{ restaurantId: string }>();
-  const [restaurantName, setRestaurantName] = useState<string>("");
+export default async function PlaceLayout({ children, params }: Props) {
+  const { restaurantId } = await params;
+  const session = await auth.api.getSession({ headers: await headers() });
 
-  useEffect(() => {
-    fetch("/api/restaurants")
-      .then((r) => r.json())
-      .then((data: any[]) => {
-        const found = data.find((r: any) => r.id === restaurantId);
-        if (found) setRestaurantName(found.name);
-      })
-      .catch(() => {});
-  }, [restaurantId]);
+  if (!session) redirect("/login");
+
+  // Restaurant users can only access their own restaurant
+  const user = session.user as Record<string, unknown>;
+  if (user.role !== "admin" && user.restaurantId !== restaurantId) {
+    redirect("/login");
+  }
 
   return (
-    <div className="d-flex">
-      <Sidebar restaurantId={restaurantId} restaurantName={restaurantName} />
-      <div className="main-content flex-grow-1">{children}</div>
-    </div>
+    <PlaceLayoutClient restaurantId={restaurantId}>
+      {children}
+    </PlaceLayoutClient>
   );
 }
