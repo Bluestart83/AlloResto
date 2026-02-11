@@ -922,46 +922,30 @@ if HAS_PJSIP:
             self._port_active = True
 
         def __del__(self):
-            """Safe destructor: prevent pj_thread_this() assertion crash.
+            """Prevent C++ destructor from crashing on unregistered thread.
 
-            Python can destroy this object from ANY thread (GC, refcount drop,
-            asyncio Task cleanup, exception traceback chain, etc.). The C++
-            destructor calls unregisterMediaPort() → pj_mutex_lock() →
-            pj_thread_this() which asserts (SIGABRT) if the thread isn't
-            registered. SIGABRT cannot be caught by try/except.
-
-            Strategy:
-            - If thread is registered with pjsip → unregister port, let C++
-              destructor run (it'll be a no-op).
-            - If thread is NOT registered → set thisown=0 so SWIG skips
-              the C++ destructor entirely. Port leaks but no crash.
+            ALWAYS set thisown=0 so SWIG never calls the C++ destructor.
+            The C++ port is already unregistered from onCallState(DISCONNECTED).
             """
-            thread_ok = False
-            try:
-                tid = threading.get_ident()
-                if tid in SipBridge._registered_thread_ids:
-                    thread_ok = True
-                else:
-                    ep = pj.Endpoint.instance()
-                    ep.libRegisterThread(f"port-gc-{tid}")
-                    SipBridge._registered_thread_ids.add(tid)
-                    thread_ok = True
-            except Exception:
-                pass
-
-            if thread_ok and self._port_active:
+            # If port still active (abnormal path), try to unregister properly
+            if self._port_active:
                 try:
+                    tid = threading.get_ident()
+                    if tid not in SipBridge._registered_thread_ids:
+                        ep = pj.Endpoint.instance()
+                        ep.libRegisterThread(f"port-gc-{tid}")
+                        SipBridge._registered_thread_ids.add(tid)
                     self.unregisterMediaPort()
                 except Exception:
                     pass
                 self._port_active = False
-            elif not thread_ok:
-                # Cannot safely run C++ destructor — disown to prevent SIGABRT
-                try:
-                    self.thisown = 0
-                except Exception:
-                    pass
-                self._port_active = False
+            # ALWAYS disown — the C++ side was already cleaned up in
+            # onCallState or just above. This prevents SwigPyObject_dealloc
+            # from calling the C++ destructor (which would SIGABRT).
+            try:
+                self.thisown = 0
+            except Exception:
+                pass
 
         def onFrameReceived(self, frame):
             """Called by PJSIP when audio arrives from remote party."""
@@ -1085,6 +1069,10 @@ if HAS_PJSIP:
                     except Exception as e:
                         logger.warning(f"[{self.call_sid[:8]}] AudioPort cleanup: {e}")
                     self.audio_port._port_active = False
+                    try:
+                        self.audio_port.thisown = 0
+                    except Exception:
+                        pass
                     self.audio_port = None
                 if self.session:
                     self.session.audio_port = None
