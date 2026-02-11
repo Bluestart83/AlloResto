@@ -579,6 +579,17 @@ class SipBridge:
         # Init PJSIP
         await self.loop.run_in_executor(self._executor, self.pjsip_init)
 
+        # Register the asyncio/main thread with pjsip so that Python's GC
+        # can safely destroy pjsip objects (AudioMediaPort etc.) from this
+        # thread without triggering pj_thread_this() assertion crash.
+        try:
+            tid = threading.get_ident()
+            self._endpoint.libRegisterThread(f"asyncio-{tid}")
+            self._registered_thread_ids.add(tid)
+            logger.info(f"Asyncio main thread {tid} registered with pjsip (GC-safe)")
+        except Exception as e:
+            logger.warning(f"Failed to register asyncio thread with pjsip: {e}")
+
         # Banner
         cfg = self.config
         logger.info("=" * 65)
@@ -1021,6 +1032,19 @@ if HAS_PJSIP:
                             30, lambda: self.bridge.active_calls.pop(sid, None)
                         )
                     )
+
+                # Nettoyer l'audio port depuis le thread pjsip (enregistré)
+                # pour éviter que le GC Python le détruise depuis un thread
+                # non-enregistré → crash pj_thread_this() assertion
+                if self.audio_port:
+                    try:
+                        self.audio_port.unregisterMediaPort()
+                    except Exception as e:
+                        logger.warning(f"[{self.call_sid[:8]}] AudioPort cleanup: {e}")
+                    self.audio_port = None
+                if self.session:
+                    self.session.audio_port = None
+                    self.session.stop()
 
                 # Nettoyer la ref call pour éviter que le GC Python
                 # détruise l'objet Call depuis un thread non-enregistré
