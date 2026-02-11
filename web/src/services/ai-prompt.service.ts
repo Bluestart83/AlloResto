@@ -64,6 +64,8 @@ interface CustomerContext {
   deliveryCity: string | null;
   deliveryPostalCode: string | null;
   deliveryNotes: string | null;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
   totalOrders: number;
   totalSpent: number;
 }
@@ -479,7 +481,7 @@ function buildSystemPrompt(
       ]
         .filter(Boolean)
         .join("\n")
-    : "NOUVEAU CLIENT : Demande son prenom. Si livraison, demande l'adresse complete (rue, code postal, ville) puis appelle save_customer_info.";
+    : "NOUVEAU CLIENT : Demande son prenom. Si livraison, demande l'adresse COMPLETE (numero + rue, code postal, ville) — ne JAMAIS accepter juste la ville. Puis appelle save_customer_info.";
 
   // Info frais de livraison pour les règles
   let deliveryFeeRule = "";
@@ -529,7 +531,7 @@ function buildSystemPrompt(
    - Mode "pickup" : appeler avec mode="pickup". Tu recevras estimatedTime (HH:MM).
    - Mode "delivery" : ${customerFullAddress
       ? `tu connais deja l'adresse du client ("${customerFullAddress}"). Propose-la et demande confirmation. Si le client confirme, utilise cette adresse. Si le client donne une nouvelle adresse, utilise la nouvelle et appelle save_customer_info pour la sauvegarder.`
-      : `demander l'adresse complete (rue, ville, code postal), puis appeler save_customer_info pour l'enregistrer.`}
+      : `demander l'adresse COMPLETE : numero + rue + ville + code postal. IMPORTANT : ne JAMAIS accepter juste une ville sans la rue. Si le client donne uniquement la ville, insister : "Il me faut aussi le numero et le nom de la rue pour la livraison." Appeler save_customer_info pour l'enregistrer.`}
      Appeler check_availability avec mode="delivery" + adresse.
      Si available=false → proposer le retrait sur place.
      ${restaurant.deliveryEnabled ? `Si le total est inferieur a ${Number(restaurant.minOrderAmount).toFixed(2)}€ → refuser la livraison.` : ""}
@@ -545,7 +547,7 @@ function buildSystemPrompt(
     rules.push(`${ruleNumber}. LIVRAISON :
    a. ${customerFullAddress
       ? `L'adresse de livraison est connue : "${customerFullAddress}". Propose-la au client ("On livre au ${customerFullAddress} ?"). Si le client confirme → utiliser directement. Si le client donne une nouvelle adresse → utiliser la nouvelle.`
-      : `Demander l'adresse complete (rue, ville, code postal).`}
+      : `Demander l'adresse COMPLETE : numero + rue + ville + code postal. Ne JAMAIS accepter juste une ville ou un quartier sans la rue precise.`}
    b. Appeler check_availability(mode="delivery", ...) → tu recevras estimatedTime et deliveryFee
    c. Annoncer les frais de livraison AVANT la confirmation
    d. Annoncer l'heure de livraison retournee par check_availability
@@ -563,6 +565,7 @@ function buildSystemPrompt(
    - Reformuler la commande complete a voix haute
    - Annoncer le total TTC (articles + frais de livraison si applicable)
    - Annoncer l'heure de retrait / livraison (celle retournee par check_availability)
+   - Si le client a mentionne une demande speciale pendant la conversation (allergie, cuisson, sans un ingredient, etc.), l'inclure automatiquement dans le champ "notes" de l'article concerne ou dans "notes" general. Ne PAS demander explicitement — deduire du contexte.
    - Obtenir la confirmation explicite du client`);
   ruleNumber++;
 
@@ -721,7 +724,7 @@ ${customerFullAddress
 Livraison (nouvelle adresse) :
 "Vous souhaitez changer d'adresse ? Donnez-moi la nouvelle adresse, s'il vous plait."`
     : `Livraison (demander adresse) :
-"A quelle adresse souhaitez-vous etre livre ? La rue, la ville et le code postal, s'il vous plait."`}
+"A quelle adresse souhaitez-vous etre livre ? Il me faut le numero et le nom de la rue, la ville et le code postal."`}
 
 Validation horaire (livraison) :
 "Votre commande pourrait etre livree vers [estimatedTime]. Ca vous convient ?"
@@ -1207,6 +1210,8 @@ export async function buildAiSessionConfig(
         deliveryCity: customer.deliveryCity,
         deliveryPostalCode: customer.deliveryPostalCode,
         deliveryNotes: customer.deliveryNotes,
+        deliveryLat: customer.deliveryLat ? Number(customer.deliveryLat) : null,
+        deliveryLng: customer.deliveryLng ? Number(customer.deliveryLng) : null,
         totalOrders: customer.totalOrders,
         totalSpent: Number(customer.totalSpent),
       };

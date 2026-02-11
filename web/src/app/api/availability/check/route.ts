@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
       customerAddress: body.customerAddress,
       customerCity: body.customerCity,
       customerPostalCode: body.customerPostalCode,
+      customerLat: body.customerLat,
+      customerLng: body.customerLng,
       partySize: body.partySize,
       seatingPreference: body.seatingPreference,
     });

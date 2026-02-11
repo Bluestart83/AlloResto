@@ -84,7 +84,16 @@ export class Call {
   })
   costAi!: number;
 
-  /** Currency of costAi and costTelecom (e.g. "EUR", "USD") */
+  @Column({
+    name: "cost_google",
+    type: "decimal",
+    precision: 8,
+    scale: 4,
+    default: 0,
+  })
+  costGoogle!: number;
+
+  /** Currency of costAi, costTelecom, costGoogle (e.g. "EUR", "USD") */
   @Column({ name: "cost_currency", type: "varchar", length: 3, default: "EUR" })
   costCurrency!: string;
 

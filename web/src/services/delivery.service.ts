@@ -30,7 +30,7 @@ export interface DeliveryCheck {
   customerLng: number;
   customerAddressFormatted: string;
 
-  // Distance & temps (route réelle)
+  // Distance & temps
   distanceKm: number;
   durationMin: number;
   distanceText: string;
@@ -39,6 +39,9 @@ export interface DeliveryCheck {
   // Livraison
   estimatedDeliveryMin: number;
   reason?: string;
+
+  // Facturation API
+  googleApiCalls: number;
 }
 
 interface RouteResult {
@@ -177,6 +180,9 @@ export async function checkDelivery(params: {
   customerAddress: string;
   customerCity?: string;
   customerPostalCode?: string;
+  /** Coordonnées GPS déjà connues du client — évite le géocodage Google */
+  customerLat?: number;
+  customerLng?: number;
 }): Promise<DeliveryCheck> {
   const {
     restaurantLat,
@@ -186,69 +192,77 @@ export async function checkDelivery(params: {
     customerAddress,
     customerCity = "",
     customerPostalCode = "",
+    customerLat: storedLat,
+    customerLng: storedLng,
   } = params;
 
-  // 1. Géocodage
-  const geo = await geocodeAddress(
-    customerAddress,
-    customerCity,
-    customerPostalCode
-  );
+  let lat: number;
+  let lng: number;
+  let formattedAddress: string;
+  let googleApiCalls = 0;
 
-  if (!geo) {
-    return {
-      isDeliverable: false,
-      customerLat: 0,
-      customerLng: 0,
-      customerAddressFormatted: customerAddress,
-      distanceKm: 0,
-      durationMin: 0,
-      distanceText: "",
-      durationText: "",
-      estimatedDeliveryMin: 0,
-      reason: "address_not_found",
-    };
+  if (storedLat && storedLng) {
+    // Coordonnées déjà connues — pas de géocodage
+    lat = storedLat;
+    lng = storedLng;
+    formattedAddress = [customerAddress, customerPostalCode, customerCity]
+      .filter(Boolean)
+      .join(", ");
+  } else {
+    // Géocodage Google (1 appel API)
+    const geo = await geocodeAddress(
+      customerAddress,
+      customerCity,
+      customerPostalCode
+    );
+    googleApiCalls++;
+
+    if (!geo) {
+      return {
+        isDeliverable: false,
+        customerLat: 0,
+        customerLng: 0,
+        customerAddressFormatted: customerAddress,
+        distanceKm: 0,
+        durationMin: 0,
+        distanceText: "",
+        durationText: "",
+        estimatedDeliveryMin: 0,
+        reason: "address_not_found",
+        googleApiCalls,
+      };
+    }
+
+    lat = geo.lat;
+    lng = geo.lng;
+    formattedAddress = geo.formattedAddress;
   }
 
-  // 2. Route réelle
-  let route = await getRouteDistance(
-    restaurantLat,
-    restaurantLng,
-    geo.lat,
-    geo.lng
-  );
+  // Distance par approximation géodésique (haversine × 1.4 pour route)
+  const straightKm = haversineKm(restaurantLat, restaurantLng, lat, lng);
+  const roadKm = Math.round(straightKm * 1.4 * 10) / 10;
+  const durationMin = Math.ceil(roadKm * 3); // ~20 km/h en ville
 
-  // Fallback vol d'oiseau × 1.4
-  if (!route) {
-    const dist = haversineKm(restaurantLat, restaurantLng, geo.lat, geo.lng);
-    const estimated = Math.round(dist * 1.4 * 10) / 10;
-    route = {
-      distanceKm: estimated,
-      distanceText: `~${estimated} km`,
-      durationMin: Math.ceil(estimated * 3), // ~20 km/h en ville
-      durationText: `~${Math.ceil(estimated * 3)} min`,
-    };
-  }
+  // Vérifier rayon
+  const isDeliverable = straightKm <= deliveryRadiusKm;
 
-  // 3. Vérifier rayon
-  const isDeliverable = route.distanceKm <= deliveryRadiusKm;
-
-  // 4. Temps total
-  const estimatedDeliveryMin = avgPrepTimeMin + route.durationMin;
+  // Temps total
+  const estimatedDeliveryMin = avgPrepTimeMin + durationMin;
 
   return {
     isDeliverable,
-    customerLat: geo.lat,
-    customerLng: geo.lng,
-    customerAddressFormatted: geo.formattedAddress,
-    distanceKm: route.distanceKm,
-    durationMin: route.durationMin,
-    distanceText: route.distanceText,
-    durationText: route.durationText,
+    customerLat: lat,
+    customerLng: lng,
+    customerAddressFormatted: formattedAddress,
+    distanceKm: roadKm,
+    durationMin,
+    distanceText: `~${roadKm} km`,
+    durationText: `~${durationMin} min`,
     estimatedDeliveryMin,
     reason: isDeliverable
       ? undefined
-      : `distance_${route.distanceKm}km_max_${deliveryRadiusKm}km`,
+      : `distance_${roadKm}km_max_${deliveryRadiusKm}km`,
+    googleApiCalls,
   };
 }
 

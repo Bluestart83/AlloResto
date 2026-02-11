@@ -26,6 +26,8 @@ export interface AvailabilityParams {
   customerAddress?: string;
   customerCity?: string;
   customerPostalCode?: string;
+  customerLat?: number;
+  customerLng?: number;
   // reservation only
   partySize?: number;
   seatingPreference?: string; // "window" | "outdoor" | "large_table" | etc.
@@ -48,6 +50,8 @@ export interface AvailabilityResult {
   seatsAvailable?: number;
   serviceId?: string;
   serviceName?: string;
+  // facturation
+  googleApiCalls?: number;
 }
 
 // ============================================================
@@ -165,6 +169,8 @@ export async function checkAvailability(
       customerAddress: params.customerAddress,
       customerCity: params.customerCity,
       customerPostalCode: params.customerPostalCode,
+      customerLat: params.customerLat,
+      customerLng: params.customerLng,
     });
 
     if (!deliveryResult.isDeliverable) {
@@ -208,6 +214,7 @@ export async function checkAvailability(
       customerAddressFormatted: deliveryResult.customerAddressFormatted,
       customerLat: deliveryResult.customerLat,
       customerLng: deliveryResult.customerLng,
+      googleApiCalls: deliveryResult.googleApiCalls,
     };
   }
 

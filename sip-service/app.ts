@@ -88,11 +88,16 @@ interface Ctx {
   currency: string;
   /** Exchange rate from USD to restaurant currency */
   exchange_rate_to_local: number;
+  // Customer delivery coords (from AI config / availability check)
+  customer_delivery_lat: number | null;
+  customer_delivery_lng: number | null;
   // Token usage accumulators (summed across all response.done events)
   input_tokens: number;
   output_tokens: number;
   input_audio_tokens: number;
   output_audio_tokens: number;
+  // Google API calls tracker (for billing)
+  google_api_calls: number;
 }
 
 type ToolHandler = (
@@ -304,8 +309,26 @@ async function handleCheckAvailability(
     if (args.seating_preference)
       payload.seatingPreference = args.seating_preference;
 
+    // Passer les coords GPS du client si connues (évite le géocodage Google)
+    if (ctx.customer_delivery_lat && ctx.customer_delivery_lng) {
+      payload.customerLat = ctx.customer_delivery_lat;
+      payload.customerLng = ctx.customer_delivery_lng;
+    }
+
     const result = await apiPost("/api/availability/check", payload);
     ctx.last_availability_check = result;
+
+    // Mettre à jour les coords dans le contexte (pour réutilisation)
+    if (result.customerLat && result.customerLng) {
+      ctx.customer_delivery_lat = result.customerLat;
+      ctx.customer_delivery_lng = result.customerLng;
+    }
+
+    // Tracker les appels Google API
+    if (result.googleApiCalls) {
+      ctx.google_api_calls += result.googleApiCalls;
+    }
+
     return result;
   } catch (e) {
     console.error(`Erreur check_availability: ${e}`);
@@ -490,6 +513,12 @@ async function handleSaveCustomer(
   if (args.delivery_postal_code)
     customerData.deliveryPostalCode = args.delivery_postal_code;
   if (args.delivery_notes) customerData.deliveryNotes = args.delivery_notes;
+
+  // Sauvegarder les coords GPS du dernier check_availability (évite re-géocodage)
+  if (ctx.customer_delivery_lat && ctx.customer_delivery_lng) {
+    customerData.deliveryLat = ctx.customer_delivery_lat;
+    customerData.deliveryLng = ctx.customer_delivery_lng;
+  }
 
   try {
     const result = await apiPost("/api/customers", customerData);
@@ -790,11 +819,15 @@ async function finalizeCall(ctx: Ctx): Promise<void> {
     ? duration / 60 * pricing.telecomCostPerMin
     : 0;
 
+  // 3b. Coût API Google (géocodage) — ~0.005€/appel
+  const costGoogleProvider = ctx.google_api_calls * 0.005;
+
   // 4. Convertir en devise de facturation (BILLING_CURRENCY) avec taux BCE
   const billingCurrency = process.env.NEXT_PUBLIC_BILLING_CURRENCY!;
   const fx = ctx.exchange_rate_to_local; // providerCurrency → billingCurrency
   const costAi = Math.round(costAiProvider * fx * 10000) / 10000;
   const costTelecom = Math.round(costTelecomProvider * fx * 10000) / 10000;
+  const costGoogle = Math.round(costGoogleProvider * fx * 10000) / 10000;
 
   const updates: Record<string, any> = {
     id: callId,
@@ -807,6 +840,7 @@ async function finalizeCall(ctx: Ctx): Promise<void> {
     outputAudioTokens: ctx.output_audio_tokens,
     costAi,
     costTelecom,
+    costGoogle,
     aiModel: ctx.ai_model,
     costCurrency: billingCurrency,
   };
@@ -821,7 +855,7 @@ async function finalizeCall(ctx: Ctx): Promise<void> {
 
   try {
     await apiPatch("/api/calls", updates);
-    console.log(`Call ${callId} finalise (${duration}s, ${outcome}, tokens=${ctx.input_tokens + ctx.output_tokens}, cost_ai=${costAi.toFixed(4)}${billingCurrency} [brut=${costAiProvider.toFixed(4)}${providerCurrency}, marge=${ctx.ai_cost_margin_pct}%, fx=${fx}], cost_tel=${costTelecom.toFixed(4)}${billingCurrency}, provider=openai)`);
+    console.log(`Call ${callId} finalise (${duration}s, ${outcome}, tokens=${ctx.input_tokens + ctx.output_tokens}, cost_ai=${costAi.toFixed(4)}${billingCurrency} [brut=${costAiProvider.toFixed(4)}${providerCurrency}, marge=${ctx.ai_cost_margin_pct}%, fx=${fx}], cost_tel=${costTelecom.toFixed(4)}${billingCurrency}, cost_google=${costGoogle.toFixed(4)}${billingCurrency} [${ctx.google_api_calls} appels], provider=openai)`);
   } catch (e) {
     console.error(`Erreur finalisation call: ${e}`);
   }
@@ -1067,10 +1101,13 @@ server.register(async (app) => {
         currency: process.env.NEXT_PUBLIC_BILLING_CURRENCY!,
         exchange_rate_to_local: 1,
         ai_model: null,
+        customer_delivery_lat: null,
+        customer_delivery_lng: null,
         input_tokens: 0,
         output_tokens: 0,
         input_audio_tokens: 0,
         output_audio_tokens: 0,
+        google_api_calls: 0,
       };
 
       let aiConfig: Record<string, any> | null = null;
@@ -1518,6 +1555,8 @@ server.register(async (app) => {
               if (customer) {
                 ctx.customer_id = customer.id || null;
                 ctx.customer_name = customer.firstName || null;
+                ctx.customer_delivery_lat = customer.deliveryLat ?? null;
+                ctx.customer_delivery_lng = customer.deliveryLng ?? null;
               }
             } catch (e) {
               console.error(
