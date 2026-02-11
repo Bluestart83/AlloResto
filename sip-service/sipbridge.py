@@ -65,6 +65,7 @@ class NatConfig:
     turn_username: str = ""
     turn_password: str = ""
     ice_enabled: bool = True
+    udp_ka_interval_sec: int = 15   # keepalive UDP pour maintenir le NAT (0 = désactivé)
 
 
 @dataclass
@@ -378,6 +379,9 @@ class SipBridge:
         acc_cfg.sipConfig.authCreds.append(cred)
 
         acc_cfg.natConfig.iceEnabled = cfg.nat.ice_enabled
+        # UDP keepalive pour maintenir le mapping NAT
+        if cfg.nat.udp_ka_interval_sec > 0:
+            acc_cfg.natConfig.udpKaIntervalSec = cfg.nat.udp_ka_interval_sec
         if cfg.nat.turn_server:
             acc_cfg.natConfig.turnEnabled = True
             acc_cfg.natConfig.turnServer = cfg.nat.turn_server
@@ -396,8 +400,17 @@ class SipBridge:
             self._endpoint = None
             logger.info("PJSIP arrêté")
 
+    _poll_thread_registered = False
+
     def pjsip_poll(self):
         if self._endpoint:
+            if not self._poll_thread_registered:
+                try:
+                    self._endpoint.libRegisterThread("poll")
+                    self._poll_thread_registered = True
+                    logger.debug("pjsip_poll: thread registered")
+                except Exception as e:
+                    logger.warning(f"pjsip_poll: libRegisterThread failed: {e}")
             self._endpoint.libHandleEvents(10)
 
     # ── FastAPI ────────────────────────────────────────────
@@ -638,19 +651,20 @@ class SipBridge:
                 try:
                     if self._endpoint:
                         self._endpoint.libRegisterThread("cleanup")
-                except Exception:
-                    pass
-                for sid, record in list(self.active_calls.items()):
-                    call_ref = record._call_ref
-                    if call_ref and record.status not in (
-                        CallStatus.COMPLETED, CallStatus.FAILED,
-                        CallStatus.CANCELLED,
-                    ):
-                        try:
-                            prm = pj.CallOpParam()
-                            call_ref.hangup(prm)
-                        except Exception:
-                            pass
+                        logger.info("[CLEANUP] Thread registered for cleanup")
+                except Exception as e:
+                    logger.warning(f"[CLEANUP] libRegisterThread failed: {e}")
+                active = [(sid, r) for sid, r in self.active_calls.items()
+                          if r._call_ref and r.status not in (
+                              CallStatus.COMPLETED, CallStatus.FAILED, CallStatus.CANCELLED)]
+                logger.info(f"[CLEANUP] Hanging up {len(active)} active call(s)")
+                for sid, record in active:
+                    try:
+                        prm = pj.CallOpParam()
+                        record._call_ref.hangup(prm)
+                        logger.info(f"[CLEANUP] Hung up {sid[:8]}")
+                    except Exception as e:
+                        logger.warning(f"[CLEANUP] Hangup {sid[:8]} failed: {e}")
                 self.active_calls.clear()
                 # Skip ep.libDestroy() — it causes UE zombie processes on macOS
 
@@ -763,8 +777,9 @@ class _WsSession:
                     import time
                     try:
                         self.bridge._endpoint.libRegisterThread("ws-hangup")
-                    except Exception:
-                        pass
+                        logger.debug(f"[{self.call_sid[:8]}] ws-hangup thread registered")
+                    except Exception as e:
+                        logger.warning(f"[{self.call_sid[:8]}] ws-hangup libRegisterThread failed: {e}")
                     try:
                         prm = pj.CallOpParam()
                         record._call_ref.hangup(prm)
@@ -957,6 +972,14 @@ if HAS_PJSIP:
 
             if ci.state == pj.PJSIP_INV_STATE_DISCONNECTED:
                 self._connected = False
+                duration_s = 0
+                if record and record.answered_at:
+                    try:
+                        answered = datetime.fromisoformat(record.answered_at)
+                        duration_s = int((datetime.now(timezone.utc) - answered).total_seconds())
+                    except Exception:
+                        pass
+                logger.info(f"[{self.call_sid[:8]}] DISCONNECTED — SIP {ci.lastStatusCode}, duration={duration_s}s, reason={ci.lastReason}")
 
                 final_status = CallStatus.COMPLETED
                 sip_code = ci.lastStatusCode
@@ -1151,6 +1174,7 @@ if HAS_PJSIP:
 
         def onRegState(self, prm):
             ai = self.getInfo()
+            was_registered = self.bridge._sip_registered
             # Cache registration state for thread-safe access from /health
             self.bridge._sip_registered = bool(ai.regIsActive)
             if ai.regIsActive:
@@ -1161,3 +1185,6 @@ if HAS_PJSIP:
             else:
                 self.bridge._sip_registered = False
                 logger.error(f"SIP REGISTRATION FAILED — {ai.uri} (code {ai.regStatus}: {ai.regStatusText})")
+            # Alerte si on perd la registration (on était enregistré, on ne l'est plus)
+            if was_registered and not self.bridge._sip_registered:
+                logger.error(f"[ALERTE] Registration SIP PERDUE — les appels entrants ne seront plus recus ! (code {ai.regStatus}: {ai.regStatusText})")

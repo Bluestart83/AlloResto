@@ -747,7 +747,12 @@ async function handleFunctionCall(
       },
     }),
   );
-  openaiWs.send(JSON.stringify({ type: "response.create" }));
+
+  // Ne PAS demander à l'IA de générer une réponse après end_call
+  // (sinon elle dit "L'appel est maintenant terminé" de façon robotique)
+  if (functionName !== "end_call") {
+    openaiWs.send(JSON.stringify({ type: "response.create" }));
+  }
 }
 
 // ============================================================
@@ -1041,6 +1046,12 @@ server.register(async (app) => {
             console.log(`OpenAI: ${responseType}`);
           }
 
+          // Log détaillé des erreurs OpenAI
+          if (responseType === "error") {
+            const err = response.error || response;
+            console.error(`OpenAI ERROR detail: type=${err.type || "?"}, code=${err.code || "?"}, message=${err.message || JSON.stringify(err)}`);
+          }
+
           // Audio delta → renvoyer à Twilio
           if (
             responseType === "response.audio.delta" &&
@@ -1055,6 +1066,7 @@ server.register(async (app) => {
             );
             if (responseStartTimestampTwilio === null) {
               responseStartTimestampTwilio = latestMediaTimestamp;
+              console.log(`[TIMING] Audio response started at media_ts=${latestMediaTimestamp}ms`);
             }
           }
 
@@ -1062,6 +1074,7 @@ server.register(async (app) => {
           if (responseType === "response.audio_transcript.done") {
             const text = response.transcript || "";
             if (text) {
+              console.log(`[TRANSCRIPT] IA: ${text.slice(0, 120)}${text.length > 120 ? "..." : ""}`);
               ctx.had_conversation = true;
               ctx.transcript.push({
                 role: "assistant",
@@ -1078,6 +1091,7 @@ server.register(async (app) => {
           ) {
             const text = response.transcript || "";
             if (text) {
+              console.log(`[TRANSCRIPT] Client: ${text.slice(0, 120)}${text.length > 120 ? "..." : ""}`);
               ctx.had_conversation = true;
               ctx.transcript.push({
                 role: "user",
@@ -1135,6 +1149,11 @@ server.register(async (app) => {
 
           // Marquer la fin d'un segment audio
           if (responseType === "response.audio.done") {
+            const audioDuration = responseStartTimestampTwilio !== null
+              ? latestMediaTimestamp - responseStartTimestampTwilio
+              : 0;
+            console.log(`[TIMING] Audio response done — duration=${audioDuration}ms, media_ts=${latestMediaTimestamp}ms, should_hangup=${ctx.should_hangup}`);
+
             socket.send(
               JSON.stringify({
                 event: "mark",
@@ -1143,27 +1162,31 @@ server.register(async (app) => {
               }),
             );
             markQueue.push("responsePart");
+            responseStartTimestampTwilio = null;
 
             // Auto-hangup: déclenché par end_call ou transfer_call
             if (ctx.should_hangup) {
               if (ctx.transferred) {
                 console.log(
-                  `Transfer: transfert vers ${ctx.transfer_phone} (raison: ${ctx.transfer_reason})`,
+                  `[HANGUP] Transfer vers ${ctx.transfer_phone} (raison: ${ctx.transfer_reason})`,
                 );
                 await executeTransfer(ctx, socket as any, streamSid!);
               } else {
                 console.log(
-                  "Auto-hangup: end_call reçu, fermeture de l'appel",
+                  `[HANGUP] end_call — delai ${HANGUP_DELAY_S}s avant fermeture`,
                 );
               }
               await sleep(HANGUP_DELAY_S);
+              console.log(`[HANGUP] Finalisation appel...`);
               await finalizeCall(ctx);
+              console.log(`[HANGUP] Envoi event stop au stream ${streamSid}`);
               socket.send(
                 JSON.stringify({
                   event: "stop",
                   streamSid,
                 }),
               );
+              console.log(`[HANGUP] Cleanup`);
               cleanup();
               return;
             }
@@ -1173,15 +1196,16 @@ server.register(async (app) => {
         }
       });
 
-      openaiWs.on("close", () => {
-        console.log("Connexion OpenAI fermee");
+      openaiWs.on("close", (code, reason) => {
+        console.log(`[WS] OpenAI fermee code=${code} reason=${reason?.toString() || ""}`);
         if (!finished) {
+          console.log("[WS] OpenAI close inattendu — finalisation...");
           finalizeCall(ctx).then(() => cleanup());
         }
       });
 
       openaiWs.on("error", (err) => {
-        console.error(`Erreur OpenAI WebSocket: ${err}`);
+        console.error(`[WS] OpenAI error: ${err.message || err}`);
       });
 
       // ------------------------------------------------
@@ -1325,7 +1349,8 @@ server.register(async (app) => {
               markQueue.shift();
             }
           } else if (msg.event === "stop") {
-            console.log("Stream arrete par Twilio");
+            const elapsed = Math.floor((Date.now() - ctx.call_start.getTime()) / 1000);
+            console.log(`[STREAM] Stop recu (Twilio/Bridge) apres ${elapsed}s — finalisation...`);
             await finalizeCall(ctx);
             cleanup();
           }
@@ -1336,9 +1361,11 @@ server.register(async (app) => {
         }
       });
 
-      socket.on("close", () => {
-        console.log("Client deconnecte");
+      socket.on("close", (code, reason) => {
+        const elapsed = Math.floor((Date.now() - ctx.call_start.getTime()) / 1000);
+        console.log(`[WS] Client/Bridge deconnecte code=${code} apres ${elapsed}s`);
         if (!finished) {
+          console.log("[WS] Deconnexion inattendue — finalisation...");
           finalizeCall(ctx).then(() => cleanup());
         }
       });
