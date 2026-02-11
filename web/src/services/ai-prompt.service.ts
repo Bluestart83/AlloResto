@@ -531,10 +531,11 @@ ${casesText}
   rules.push(`${ruleNumber}. FIN D'APPEL :
    - Apres une commande confirmee ou une reservation, TOUJOURS demander "Est-ce que je peux faire autre chose pour vous ?" ou "Autre chose ?" AVANT de dire au revoir.
    - Quand la conversation est vraiment terminee (le client confirme qu'il n'a plus besoin de rien, ou veut raccrocher) :
-     1. Dis au revoir naturellement (ex: "Merci et a bientot chez ${restaurant.name} !")
-     2. Appelle end_call IMMEDIATEMENT apres — ne dis PLUS RIEN apres end_call.
+     1. Tu DOIS dire au revoir a voix haute DANS LA MEME REPONSE que end_call (ex: "Merci et a bientot chez ${restaurant.name} !")
+     2. Puis appelle end_call dans cette meme reponse.
+   - INTERDIT d'appeler end_call sans avoir dit au revoir a voix haute juste avant dans la meme reponse. Meme si le client dit "au revoir", tu DOIS repondre vocalement avant d'appeler end_call.
    - TOUJOURS appeler end_call pour raccrocher. Ne jamais laisser l'appel ouvert.
-   - IMPORTANT : end_call raccroche la ligne. Ne genere AUCUN texte apres avoir appele end_call.`);
+   - Ne genere AUCUN texte APRES end_call — c'est end_call qui raccroche la ligne.`);
   ruleNumber++;
 
   // Verbatim réservation
