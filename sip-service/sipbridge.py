@@ -128,7 +128,7 @@ class BridgeConfig:
     # Comportement
     auto_answer: bool = True
     max_call_duration: int = 600        # secondes, 0 = illimité
-    max_concurrent_calls: int = 10
+    max_concurrent_calls: int = 0      # 0 = illimité
 
 
 # ============================================================
@@ -341,7 +341,7 @@ class SipBridge:
         self._endpoint: Optional[Any] = None
         self._account: Optional[Any] = None
         self._sip_registered: bool = False  # cached state, updated from pjsip thread
-        self._executor = ThreadPoolExecutor(max_workers=2)
+        self._executor = ThreadPoolExecutor(max_workers=4)
         self.active_calls: dict[str, CallRecord] = {}
 
         # Derive trunk country code for local number normalization
@@ -541,7 +541,7 @@ class SipBridge:
                 1 for r in bridge.active_calls.values()
                 if r.status in (CallStatus.ACTIVE, CallStatus.ANSWERED, CallStatus.RINGING)
             )
-            if active_count >= bridge.config.max_concurrent_calls:
+            if bridge.config.max_concurrent_calls > 0 and active_count >= bridge.config.max_concurrent_calls:
                 raise HTTPException(429, f"Max appels simultanés atteint ({bridge.config.max_concurrent_calls})")
 
             to_uri = req.to
@@ -681,7 +681,7 @@ class SipBridge:
         logger.info(f"  API REST  : http://0.0.0.0:{cfg.api_port}")
         logger.info(f"  Codec     : {cfg.audio.codec_priority[0][0]}")
         logger.info(f"  EC        : {'ON' if cfg.audio.ec_enabled else 'OFF'} ({cfg.audio.ec_tail_ms}ms)")
-        logger.info(f"  Max calls : {cfg.max_concurrent_calls}")
+        logger.info(f"  Max calls : {cfg.max_concurrent_calls or 'unlimited'}")
         if cfg.custom_params:
             logger.info(f"  Params    : {cfg.custom_params}")
         if cfg.nat.turn_server:
@@ -1278,7 +1278,7 @@ if HAS_PJSIP:
                 1 for r in self.bridge.active_calls.values()
                 if r.status in (CallStatus.ACTIVE, CallStatus.ANSWERED, CallStatus.RINGING)
             )
-            if active_count >= self.bridge.config.max_concurrent_calls:
+            if self.bridge.config.max_concurrent_calls > 0 and active_count >= self.bridge.config.max_concurrent_calls:
                 logger.warning(f"Max appels atteint ({active_count}) → rejeter")
                 reject = pj.CallOpParam()
                 reject.statusCode = 486
