@@ -726,7 +726,8 @@ class SipBridge:
             pass
         finally:
             import os
-            import threading
+            # NOTE: do NOT import threading here — it shadows the module-level
+            # import and breaks threading.get_ident() earlier in run().
 
             # Watchdog: force exit after 3s no matter what
             def _watchdog():
@@ -1161,19 +1162,21 @@ if HAS_PJSIP:
                         )
                     )
 
-                # Unregister audio port from conf bridge (from pjsip thread).
-                # This sets C++ id = PJSUA_INVALID_ID, making the C++
-                # destructor a no-op when Python GC later collects the wrapper.
-                if self.audio_port:
-                    try:
-                        self.audio_port.unregisterMediaPort()
-                        logger.info(f"[{self.call_sid[:8]}] AudioPort unregistered from conf bridge")
-                    except Exception as e:
-                        logger.error(f"[{self.call_sid[:8]}] AudioPort unregisterMediaPort FAILED: {e}")
-                    self.audio_port = None
+                # Drop all references to AudioPort so Python's destructor runs.
+                # The C++ destructor calls pjsua_conf_remove_port() which needs
+                # a registered thread. This pjsip callback thread is registered,
+                # and the asyncio thread is registered at startup in run().
+                # We drop refs here so the destructor runs in one of these.
+                port = self.audio_port
+                self.audio_port = None
                 if self.session:
                     self.session.audio_port = None
                     self.session.stop()
+                # Explicitly delete from this (registered) pjsip thread
+                if port is not None:
+                    port_id = port.getPortId()
+                    del port
+                    logger.info(f"[{self.call_sid[:8]}] AudioPort destroyed (port_id was {port_id})")
 
                 # Nettoyer la ref call pour éviter que le GC Python
                 # détruise l'objet Call depuis un thread non-enregistré
