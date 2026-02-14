@@ -36,7 +36,6 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
         { href: `/place/${restaurantId}/services`, icon: "bi-clock-history", label: "Services" },
         { href: `/place/${restaurantId}/messages`, icon: "bi-envelope", label: "Messages" },
         { href: `/place/${restaurantId}/calls`, icon: "bi-telephone", label: "Appels" },
-        { href: `/place/${restaurantId}/billing`, icon: "bi-credit-card", label: "Facturation" },
         { href: `/place/${restaurantId}/menu`, icon: "bi-book", label: "Menu" },
         { href: `/place/${restaurantId}/formules`, icon: "bi-collection", label: "Formules" },
         { href: `/place/${restaurantId}/offres`, icon: "bi-gift", label: "Offres" },
@@ -167,6 +166,15 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
             <i className="bi bi-person-circle me-1"></i>
             {session.user.name || session.user.email}
           </div>
+        )}
+        {restaurantId && (
+          <Link
+            href={`/place/${restaurantId}/billing`}
+            className={`nav-link px-0 py-1${pathname.startsWith(`/place/${restaurantId}/billing`) ? " active" : ""}`}
+            style={{ fontSize: "0.8rem" }}
+          >
+            <i className="bi bi-credit-card me-1"></i>Facturation
+          </Link>
         )}
         <Link
           href={restaurantId ? `/place/${restaurantId}/settings` : "/admin/settings"}
