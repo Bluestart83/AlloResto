@@ -701,7 +701,7 @@ export default function SettingsPage() {
             </label>
             <div className="form-text">
               {sipEnabled
-                ? "Le service vocal est actif — le service manager démarrera l'agent pour ce restaurant."
+                ? "Le service vocal est actif — l'agent sera disponible pour recevoir des appels."
                 : "Le service vocal est désactivé — aucun agent ne sera démarré."}
             </div>
           </div>

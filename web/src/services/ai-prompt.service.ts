@@ -54,6 +54,10 @@ export interface AiSessionConfig {
   exchangeRateToLocal: number;
   /** Restaurant timezone (e.g. "Europe/Paris") */
   timezone: string;
+  /** Greeting message for the first AI response (depends on customer context) */
+  greeting: string;
+  /** Pre-populated context for sip-agent-server ContextStore */
+  initialContext: Record<string, any>;
 }
 
 interface CustomerContext {
@@ -1268,6 +1272,33 @@ export async function buildAiSessionConfig(
     customerContext
   );
 
+  // Build greeting (first AI response trigger)
+  let greeting: string;
+  if (customerContext?.firstName) {
+    greeting =
+      `Le client ${customerContext.firstName} vient d'appeler ` +
+      `(client fidele, ${customerContext.totalOrders} commandes). ` +
+      `Accueille-le par son prenom et demande ce qu'il souhaite commander.`;
+  } else {
+    greeting =
+      "Un nouveau client vient d'appeler. " +
+      "Accueille-le chaleureusement, presente-toi brievement " +
+      "et demande ce qu'il souhaite commander.";
+  }
+
+  // Build initialContext for sip-agent-server ContextStore
+  const initialContext: Record<string, any> = {
+    item_map: itemMap,
+    customer_id: customerContext?.id || null,
+    customer_name: customerContext?.firstName || null,
+    customer_delivery_lat: customerContext?.deliveryLat || null,
+    customer_delivery_lng: customerContext?.deliveryLng || null,
+    avg_prep_time_min: restaurant.avgPrepTimeMin,
+    delivery_enabled: restaurant.deliveryEnabled,
+    restaurant_id: restaurantId,
+    transfer_phone: restaurant.transferPhoneNumber || null,
+  };
+
   return {
     systemPrompt,
     tools: buildTools(restaurant),
@@ -1285,5 +1316,7 @@ export async function buildAiSessionConfig(
     currency,
     exchangeRateToLocal,
     timezone: restaurant.timezone || "Europe/Paris",
+    greeting,
+    initialContext,
   };
 }

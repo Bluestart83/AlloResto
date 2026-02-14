@@ -8,7 +8,7 @@ import { decryptSipPassword, isEncrypted } from "@/services/sip-encryption.servi
  * GET /api/sip/agents
  *
  * Retourne la liste des restaurants actifs nécessitant un service vocal.
- * Utilisé par le service manager Python pour découvrir les agents à démarrer.
+ * Utilisé par le SIP bridge pour découvrir les agents à enregistrer.
  */
 export async function GET() {
   const ds = await getDb();
