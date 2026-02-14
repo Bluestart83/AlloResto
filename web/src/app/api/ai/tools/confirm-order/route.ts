@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
   const orderType = order_type;
   const orderData: Record<string, any> = {
     restaurantId,
-    callId: callId || null,
+    callId: callId || null,  // sip-agent-server CallRecord UUID (no local FK)
     customerId: customerId || null,
     customerName: customerName || null,
     customerPhone: callerPhone,
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     deliveryFee: delivery_fee || 0,
     estimatedReadyAt,
     notes: notes || "",
-    paymentMethod: payment_method,
+    paymentMethod: payment_method || "cash",
     source: "phone_ai",
   };
 
@@ -174,10 +174,8 @@ export async function POST(req: NextRequest) {
       await ds.getRepository(OrderItem).save(orderItem);
     }
 
-    // Update call outcome
-    if (callId) {
-      await ds.getRepository(Call).update(callId, { outcome: "order_placed" });
-    }
+    // NOTE: Call outcome is updated by the webhook at end of call, not here.
+    // The sip-agent-server call_id doesn't exist in AlloResto's calls table.
 
     // Update customer stats
     if (customerId) {

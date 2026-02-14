@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const orders = await ds.getRepository(Order).find({
     where,
-    relations: ["items", "customer", "call"],
+    relations: ["items", "customer"],
     order: { createdAt: "DESC" },
     take: 50,
   });
@@ -186,7 +186,7 @@ export async function PATCH(req: NextRequest) {
 
   const updated = await ds.getRepository(Order).findOne({
     where: { id },
-    relations: ["items", "customer", "call"],
+    relations: ["items", "customer"],
   });
 
   // Sync outbound: propager les modifications vers le service externe

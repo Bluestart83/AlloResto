@@ -17,11 +17,11 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
 
   const isAdmin = session?.user?.role === ROLE_ADMIN;
 
-  const baseItems = [
+  const baseItems: { href: string; icon: string; label: string }[] = [
     { href: "/admin/customers", icon: "bi-people", label: "Clients" },
     { href: "/admin/import", icon: "bi-cloud-download", label: "Import resto" },
     { href: "/admin/servers", icon: "bi-hdd-rack", label: "Serveurs Vocaux" },
-    { href: "/admin/pricing", icon: "bi-currency-dollar", label: "Tarification" },
+    { href: "http://localhost:5173", icon: "bi-speedometer2", label: "Plateforme IA" },
   ];
 
   const restaurantItems = restaurantId
@@ -36,6 +36,7 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
         { href: `/place/${restaurantId}/services`, icon: "bi-clock-history", label: "Services" },
         { href: `/place/${restaurantId}/messages`, icon: "bi-envelope", label: "Messages" },
         { href: `/place/${restaurantId}/calls`, icon: "bi-telephone", label: "Appels" },
+        { href: `/place/${restaurantId}/billing`, icon: "bi-credit-card", label: "Facturation" },
         { href: `/place/${restaurantId}/menu`, icon: "bi-book", label: "Menu" },
         { href: `/place/${restaurantId}/formules`, icon: "bi-collection", label: "Formules" },
         { href: `/place/${restaurantId}/offres`, icon: "bi-gift", label: "Offres" },
@@ -133,17 +134,22 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
               </small>
             </div>
             <ul className="nav flex-column">
-              {baseItems.map((item) => (
-                <li className="nav-item" key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={`nav-link d-flex align-items-center ${isActive(item.href) ? "active" : ""}`}
-                  >
-                    <i className={`bi ${item.icon}`}></i>
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
+              {baseItems.map((item) => {
+                const isExternal = item.href.startsWith("http");
+                return (
+                  <li className="nav-item" key={item.href}>
+                    <Link
+                      href={item.href}
+                      {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      className={`nav-link d-flex align-items-center ${!isExternal && isActive(item.href) ? "active" : ""}`}
+                    >
+                      <i className={`bi ${item.icon}`}></i>
+                      {item.label}
+                      {isExternal && <i className="bi bi-box-arrow-up-right ms-auto" style={{ fontSize: "0.65rem" }}></i>}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}

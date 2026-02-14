@@ -4,13 +4,11 @@ import {
   Column,
   CreateDateColumn,
   ManyToOne,
-  OneToOne,
   JoinColumn,
 } from "typeorm";
 import type { Restaurant } from "./Restaurant";
 import type { PhoneLine } from "./PhoneLine";
 import type { Customer } from "./Customer";
-import type { Order } from "./Order";
 
 export type CallOutcome =
   | "in_progress"
@@ -121,8 +119,4 @@ export class Call {
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
-
-  // --- Relations ---
-  @OneToOne("Order", "call", { nullable: true })
-  order!: Order | null;
 }

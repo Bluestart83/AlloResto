@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { PhoneLine } from "@/db/entities/PhoneLine";
 import { Restaurant } from "@/db/entities/Restaurant";
 import { encryptSipPassword, isEncrypted } from "@/services/sip-encryption.service";
+import { updateAgent } from "@/services/sip-agent-provisioning.service";
 
 /**
  * GET /api/phone-lines?restaurantId=xxx
@@ -103,6 +104,19 @@ export async function PUT(req: NextRequest) {
   }
 
   await repo.save(phoneLine);
+
+  // Sync SIP/Twilio creds vers sip-agent-server
+  const restaurant = await ds.getRepository(Restaurant).findOneBy({ id: restaurantId });
+  if (restaurant?.agentId) {
+    const agentUpdates: Record<string, string> = {};
+    if (sipDomain !== undefined) agentUpdates.sipDomain = sipDomain || "";
+    if (sipUsername !== undefined) agentUpdates.sipUsername = sipUsername || "";
+    if (sipPassword) agentUpdates.sipPassword = sipPassword;
+    if (twilioTrunkSid !== undefined) agentUpdates.sipUsername = twilioTrunkSid || "";
+    if (Object.keys(agentUpdates).length > 0) {
+      await updateAgent(restaurant.agentId, agentUpdates);
+    }
+  }
 
   return NextResponse.json({
     ok: true,

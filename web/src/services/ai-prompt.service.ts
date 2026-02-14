@@ -636,6 +636,12 @@ ${casesText}
     ruleNumber++;
   }
 
+  rules.push(`${ruleNumber}. PAIEMENT :
+   - Ne JAMAIS parler de paiement ni demander le mode de paiement.
+   - Le paiement se fait sur place au retrait ou a la livraison — ce n'est pas ton sujet.
+   - Si le client pose la question, repondre simplement : "Le paiement se fait directement sur place."`);
+  ruleNumber++;
+
   rules.push(`${ruleNumber}. FIN D'APPEL :
    - Apres une commande confirmee ou une reservation, TOUJOURS demander "Est-ce que je peux faire autre chose pour vous ?" ou "Autre chose ?" AVANT de dire au revoir.
    - Quand la conversation est vraiment terminee (le client confirme qu'il n'a plus besoin de rien, ou veut raccrocher) :
@@ -877,11 +883,6 @@ function buildTools(restaurant: Restaurant): Tool[] {
           total: {
             type: "number",
             description: "Total TTC (articles + livraison)",
-          },
-          payment_method: {
-            type: "string",
-            enum: ["cash", "card", "online"],
-            description: "Mode de paiement choisi",
           },
           notes: { type: "string", description: "Notes generales sur la commande" },
         },

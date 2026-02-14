@@ -20,9 +20,16 @@ interface AgentInfo {
   config: Record<string, any>;
 }
 
+interface BridgeInfo {
+  phoneLineId: string;
+  agentId: string;
+  sipRegistered: boolean;
+}
+
 export default function ServersPage() {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [bridgeMap, setBridgeMap] = useState<Record<string, BridgeInfo>>({});
   const [loading, setLoading] = useState(true);
   const [serverOnline, setServerOnline] = useState(false);
 
@@ -34,6 +41,11 @@ export default function ServersPage() {
         setWorkers(data.workers);
         setAgents(data.agents);
         setServerOnline(data.serverOnline);
+        const map: Record<string, BridgeInfo> = {};
+        for (const b of (data.bridges || [])) {
+          map[b.agentId] = b;
+        }
+        setBridgeMap(map);
       }
     } catch {
       // ignore
@@ -154,36 +166,60 @@ export default function ServersPage() {
                     <th>Transport</th>
                     <th>Mode</th>
                     <th>Status</th>
+                    <th>SIP</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {agents.map((a) => (
-                    <tr key={a.id}>
-                      <td>
-                        <div className="fw-semibold">{a.name}</div>
-                        <small className="text-muted font-monospace" style={{ fontSize: "0.7rem" }}>
-                          {a.id.slice(0, 8)}
-                        </small>
-                      </td>
-                      <td>
-                        <span className={`badge ${a.transportType === "sip_bridge" ? "bg-primary" : "bg-info"}`} style={{ fontSize: "0.7rem" }}>
-                          {a.transportType === "sip_bridge" ? "SIP Bridge" : "Twilio"}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${a.externalSessionUrl ? "bg-secondary" : "bg-dark"}`} style={{ fontSize: "0.7rem" }}>
-                          {a.externalSessionUrl ? "External" : "Standard"}
-                        </span>
-                      </td>
-                      <td>
-                        {a.isActive ? (
-                          <span className="badge bg-success">Actif</span>
-                        ) : (
-                          <span className="badge bg-secondary">Inactif</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {agents.map((a) => {
+                    const bridge = bridgeMap[a.id];
+                    return (
+                      <tr key={a.id}>
+                        <td>
+                          <div className="fw-semibold">{a.name}</div>
+                          <small className="text-muted font-monospace" style={{ fontSize: "0.7rem" }}>
+                            {a.id.slice(0, 8)}
+                          </small>
+                        </td>
+                        <td>
+                          <span className={`badge ${a.transportType === "sip_bridge" ? "bg-primary" : "bg-info"}`} style={{ fontSize: "0.7rem" }}>
+                            {a.transportType === "sip_bridge" ? "SIP Bridge" : "Twilio"}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`badge ${a.externalSessionUrl ? "bg-secondary" : "bg-dark"}`} style={{ fontSize: "0.7rem" }}>
+                            {a.externalSessionUrl ? "External" : "Standard"}
+                          </span>
+                        </td>
+                        <td>
+                          {a.isActive ? (
+                            <span className="badge bg-success">Actif</span>
+                          ) : (
+                            <span className="badge bg-secondary">Inactif</span>
+                          )}
+                        </td>
+                        <td>
+                          {bridge ? (
+                            bridge.sipRegistered ? (
+                              <span className="badge bg-success">
+                                <i className="bi bi-telephone-fill me-1"></i>
+                                Registered
+                              </span>
+                            ) : (
+                              <span className="badge bg-danger">
+                                <i className="bi bi-telephone-x me-1"></i>
+                                Unregistered
+                              </span>
+                            )
+                          ) : (
+                            <span className="badge bg-light text-muted">
+                              <i className="bi bi-telephone me-1"></i>
+                              Offline
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

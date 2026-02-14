@@ -10,7 +10,6 @@ import {
   JoinColumn,
 } from "typeorm";
 import type { Restaurant } from "./Restaurant";
-import type { Call } from "./Call";
 import type { Customer } from "./Customer";
 import type { OrderItem } from "./OrderItem";
 import type { DeliveryTrip } from "./DeliveryTrip";
@@ -39,12 +38,9 @@ export class Order {
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
+  /** UUID from sip-agent-server CallRecord (not a local FK) */
   @Column({ name: "call_id", type: "varchar", nullable: true })
   callId!: string | null;
-
-  @OneToOne("Call", "order")
-  @JoinColumn({ name: "call_id" })
-  call!: Call;
 
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;

@@ -72,7 +72,7 @@ function buildOptions(): DataSourceOptions {
   // SQLite par défaut (POC)
   return {
     type: "better-sqlite3",
-    database: process.env.DATABASE_URL || "./poc.db",
+    database: process.env.DATABASE_URL || "./database.db",
     entities,
     synchronize: true, // auto-create tables en dev
     logging: process.env.NODE_ENV !== "production",

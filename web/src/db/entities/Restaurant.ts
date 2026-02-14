@@ -174,6 +174,12 @@ export class Restaurant {
   @Column({ name: "sip_bridge", type: "boolean", default: false })
   sipBridge!: boolean;
 
+  @Column({ name: "agent_id", type: "varchar", length: 36, nullable: true })
+  agentId!: string | null;
+
+  @Column({ name: "final_customer_id", type: "varchar", length: 36, nullable: true })
+  finalCustomerId!: string | null;
+
   // --- Config transfert d'appel ---
   @Column({ name: "transfer_enabled", type: "boolean", default: false })
   transferEnabled!: boolean;
