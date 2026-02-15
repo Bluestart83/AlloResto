@@ -3,22 +3,13 @@ import { NextResponse } from "next/server";
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
 
-interface WorkerInfo {
-  workerId: string;
-  host: string;
-  port: number;
-  wsUrl: string;
-  activeCalls: number;
-  maxCalls: number;
-}
-
 interface AgentInfo {
   id: string;
   name: string;
   transportType: string;
   isActive: boolean;
+  pauseReason: string | null;
   externalSessionUrl: string | null;
-  config: Record<string, any>;
 }
 
 interface BridgeInfo {
@@ -27,23 +18,22 @@ interface BridgeInfo {
   host: string;
   wsUrl: string;
   sipRegistered: boolean;
+  lastCodec: string;
 }
 
 /**
  * GET /api/admin/servers
- * Returns workers + agents + bridges from sip-agent-server.
+ * Returns agents + bridges + active calls from sip-agent-server.
+ * No worker info exposed — internal to the platform.
  */
 export async function GET() {
-  let workers: WorkerInfo[] = [];
   let agents: AgentInfo[] = [];
   let bridges: BridgeInfo[] = [];
+  let activeCalls: Record<string, number> = {};
   let serverOnline = false;
 
   try {
-    const [workersResp, agentsResp, bridgesResp] = await Promise.all([
-      fetch(`${SIP_AGENT_SERVER_URL}/api/workers`, {
-        signal: AbortSignal.timeout(3000),
-      }),
+    const [agentsResp, bridgesResp] = await Promise.all([
       fetch(`${SIP_AGENT_SERVER_URL}/api/agents`, {
         signal: AbortSignal.timeout(3000),
       }),
@@ -51,12 +41,6 @@ export async function GET() {
         signal: AbortSignal.timeout(3000),
       }),
     ]);
-
-    if (workersResp.ok) {
-      const data = await workersResp.json();
-      workers = data.workers || data;
-      serverOnline = true;
-    }
 
     if (agentsResp.ok) {
       agents = await agentsResp.json();
@@ -66,10 +50,11 @@ export async function GET() {
     if (bridgesResp.ok) {
       const data = await bridgesResp.json();
       bridges = data.bridges || [];
+      activeCalls = data.activeCalls || {};
     }
   } catch {
     // sip-agent-server is offline
   }
 
-  return NextResponse.json({ workers, agents, bridges, serverOnline });
+  return NextResponse.json({ agents, bridges, activeCalls, serverOnline });
 }
