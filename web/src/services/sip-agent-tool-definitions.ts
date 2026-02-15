@@ -24,19 +24,20 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "check_availability",
     description:
-      "Verifie la disponibilite selon le mode (pickup, delivery, reservation). OBLIGATOIRE avant confirm_order ou confirm_reservation.",
+      "Verifie si le restaurant peut accepter une commande ou reservation. OBLIGATOIRE : appeler AVANT confirm_order ou confirm_reservation. Pour la livraison, demander l'adresse au client d'abord.",
     parameters: {
       type: "object",
       properties: {
-        mode: { type: "string", enum: ["pickup", "delivery", "reservation"] },
-        requested_time: { type: "string", description: "Heure souhaitee (HH:MM)" },
-        customer_address: { type: "string" },
-        customer_city: { type: "string" },
-        customer_postal_code: { type: "string" },
-        party_size: { type: "integer" },
+        mode: { type: "string", enum: ["pickup", "delivery", "reservation"], description: "Type de service demande" },
+        requested_time: { type: "string", description: "Heure souhaitee par le client (format HH:MM). Laisser vide = des que possible." },
+        customer_address: { type: "string", description: "Adresse de livraison (obligatoire si mode=delivery)" },
+        customer_city: { type: "string", description: "Ville de livraison" },
+        customer_postal_code: { type: "string", description: "Code postal de livraison" },
+        party_size: { type: "integer", description: "Nombre de personnes (obligatoire si mode=reservation)" },
         seating_preference: {
           type: "string",
           enum: ["window", "outdoor", "large_table", "quiet", "bar"],
+          description: "Preference de placement (reservation uniquement)",
         },
       },
       required: ["mode"],
@@ -70,21 +71,23 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "confirm_order",
     description:
-      "Confirme et enregistre la commande. Appeler UNIQUEMENT apres check_availability OK + confirmation client.",
+      "Enregistre la commande finale. REGLES : 1) check_availability DOIT avoir ete appele avant et avoir retourne OK. 2) Le client DOIT avoir confirme oralement la liste des articles et le total. Ne JAMAIS appeler sans ces 2 conditions.",
     parameters: {
       type: "object",
       properties: {
-        order_type: { type: "string", enum: ["pickup", "delivery", "dine_in"] },
+        order_type: { type: "string", enum: ["pickup", "delivery", "dine_in"], description: "Mode de commande" },
         items: {
           type: "array",
+          description: "Liste des articles commandes avec leur #id du menu",
           items: {
             type: "object",
             properties: {
-              id: { type: "integer", description: "Numero #id de l'article" },
-              quantity: { type: "integer" },
-              unit_price: { type: "number" },
+              id: { type: "integer", description: "Numero #id de l'article tel qu'affiche dans le menu" },
+              quantity: { type: "integer", description: "Quantite commandee" },
+              unit_price: { type: "number", description: "Prix unitaire de l'article" },
               selected_options: {
                 type: "array",
+                description: "Options choisies pour cet article (sauce, cuisson, etc.)",
                 items: {
                   type: "object",
                   properties: {
@@ -95,16 +98,16 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
                   },
                 },
               },
-              notes: { type: "string" },
+              notes: { type: "string", description: "Instructions speciales pour cet article" },
             },
             required: ["id", "quantity", "unit_price"],
           },
         },
-        subtotal: { type: "number" },
-        delivery_fee: { type: "number" },
-        total: { type: "number" },
-        payment_method: { type: "string", enum: ["cash", "card", "online"] },
-        notes: { type: "string" },
+        subtotal: { type: "number", description: "Sous-total avant frais de livraison" },
+        delivery_fee: { type: "number", description: "Frais de livraison (0 si pickup)" },
+        total: { type: "number", description: "Total TTC a payer" },
+        payment_method: { type: "string", enum: ["cash", "card", "online"], description: "Moyen de paiement choisi" },
+        notes: { type: "string", description: "Instructions generales pour la commande" },
       },
       required: ["order_type", "items", "total"],
     },
@@ -134,21 +137,22 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── confirm_reservation ───
   {
     name: "confirm_reservation",
-    description: "Confirme et enregistre une reservation de table.",
+    description: "Enregistre une reservation de table. REGLES : check_availability mode=reservation DOIT avoir ete appele avant et avoir retourne OK. Demander nom, telephone, nombre de personnes et heure au client.",
     parameters: {
       type: "object",
       properties: {
-        customer_name: { type: "string" },
-        customer_phone: { type: "string" },
-        party_size: { type: "integer" },
-        reservation_time: { type: "string", description: "Heure (HH:MM)" },
+        customer_name: { type: "string", description: "Nom du client pour la reservation" },
+        customer_phone: { type: "string", description: "Telephone du client" },
+        party_size: { type: "integer", description: "Nombre de personnes" },
+        reservation_time: { type: "string", description: "Heure souhaitee (HH:MM)" },
         seating_preference: {
           type: "string",
           enum: ["window", "outdoor", "large_table", "quiet", "bar"],
+          description: "Preference de placement si demandee par le client",
         },
         service_id: { type: "string" },
         offer_id: { type: "string" },
-        notes: { type: "string" },
+        notes: { type: "string", description: "Remarques ou demandes speciales" },
       },
       required: ["customer_name", "customer_phone", "party_size", "reservation_time"],
     },
@@ -174,15 +178,15 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── save_customer_info ───
   {
     name: "save_customer_info",
-    description: "Sauvegarde le prenom ou une nouvelle adresse du client.",
+    description: "Sauvegarde les infos du client (prenom, adresse de livraison). Appeler quand le client donne son nom ou une adresse pour la premiere fois.",
     parameters: {
       type: "object",
       properties: {
-        first_name: { type: "string" },
-        delivery_address: { type: "string" },
-        delivery_city: { type: "string" },
-        delivery_postal_code: { type: "string" },
-        delivery_notes: { type: "string" },
+        first_name: { type: "string", description: "Prenom du client" },
+        delivery_address: { type: "string", description: "Adresse de livraison complete" },
+        delivery_city: { type: "string", description: "Ville de livraison" },
+        delivery_postal_code: { type: "string", description: "Code postal" },
+        delivery_notes: { type: "string", description: "Indications pour le livreur (digicode, etage, etc.)" },
       },
     },
     http: {
@@ -210,13 +214,14 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── log_new_faq ───
   {
     name: "log_new_faq",
-    description: "Remonte une question du client ABSENTE de la FAQ.",
+    description: "Remonte une question du client a laquelle tu n'as PAS pu repondre car l'info n'est pas dans ton contexte. Le restaurateur verra la question et pourra ajouter la reponse. Ne pas utiliser pour les questions auxquelles tu as deja repondu.",
     parameters: {
       type: "object",
       properties: {
-        question: { type: "string" },
+        question: { type: "string", description: "La question exacte posee par le client" },
         category: {
           type: "string",
+          description: "Categorie de la question",
           enum: [
             "horaires",
             "livraison",
@@ -254,17 +259,18 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── leave_message ───
   {
     name: "leave_message",
-    description: "Laisse un message pour le restaurant.",
+    description: "Enregistre un message du client pour le restaurateur. Utiliser quand le client veut laisser un message, faire une reclamation, demander un rappel, ou faire une demande speciale. TOUJOURS resumer clairement ce que le client a dit dans 'content'.",
     parameters: {
       type: "object",
       properties: {
-        content: { type: "string" },
-        caller_name: { type: "string" },
+        content: { type: "string", description: "Resume clair et complet du message du client. Inclure tous les details importants mentionnes." },
+        caller_name: { type: "string", description: "Nom du client si connu" },
         category: {
           type: "string",
+          description: "Type de message",
           enum: ["callback_request", "complaint", "info_request", "special_request", "other"],
         },
-        is_urgent: { type: "boolean" },
+        is_urgent: { type: "boolean", description: "Marquer urgent si le client insiste sur l'urgence" },
       },
       required: ["content", "category"],
     },
@@ -291,11 +297,11 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── check_order_status ───
   {
     name: "check_order_status",
-    description: "Recherche les commandes recentes du client par telephone.",
+    description: "Recherche les commandes recentes du client. Utiliser quand le client demande ou en est sa commande. Le telephone est recupere automatiquement du contexte de l'appel.",
     parameters: {
       type: "object",
       properties: {
-        customer_phone: { type: "string" },
+        customer_phone: { type: "string", description: "Telephone du client (utiliser le numero de l'appelant)" },
       },
       required: ["customer_phone"],
     },
@@ -309,11 +315,11 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── cancel_order ───
   {
     name: "cancel_order",
-    description: "Annule une commande (uniquement si pending ou confirmed).",
+    description: "Annule une commande du client. Possible uniquement si la commande est en statut 'pending' ou 'confirmed'. Demander confirmation au client avant d'annuler.",
     parameters: {
       type: "object",
       properties: {
-        order_number: { type: "integer" },
+        order_number: { type: "integer", description: "Numero de la commande a annuler" },
       },
       required: ["order_number"],
     },
@@ -332,11 +338,11 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── lookup_reservation ───
   {
     name: "lookup_reservation",
-    description: "Recherche les reservations a venir du client par telephone.",
+    description: "Recherche les reservations a venir du client. Utiliser quand le client veut verifier, modifier ou annuler une reservation existante.",
     parameters: {
       type: "object",
       properties: {
-        customer_phone: { type: "string" },
+        customer_phone: { type: "string", description: "Telephone du client (utiliser le numero de l'appelant)" },
       },
       required: ["customer_phone"],
     },
@@ -350,7 +356,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── cancel_reservation ───
   {
     name: "cancel_reservation",
-    description: "Annule une reservation.",
+    description: "Annule une reservation existante. Utiliser lookup_reservation d'abord pour trouver l'ID de la reservation. Demander confirmation au client avant d'annuler.",
     parameters: {
       type: "object",
       properties: {
@@ -376,11 +382,11 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── transfer_call ───
   {
     name: "transfer_call",
-    description: "Transfere l'appel vers un humain du restaurant.",
+    description: "Transfere l'appel vers un employe du restaurant. Utiliser UNIQUEMENT si le client demande explicitement a parler a quelqu'un, ou si tu ne peux pas du tout repondre a sa demande.",
     parameters: {
       type: "object",
       properties: {
-        reason: { type: "string" },
+        reason: { type: "string", description: "Raison du transfert (ex: 'Le client souhaite parler au responsable')" },
       },
       required: ["reason"],
     },
@@ -393,7 +399,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── end_call ───
   {
     name: "end_call",
-    description: "Raccroche l'appel. Appeler APRES avoir dit au revoir au client.",
+    description: "Termine et raccroche l'appel. Appeler UNIQUEMENT apres avoir dit au revoir au client et qu'il a confirme qu'il n'a plus besoin de rien.",
     parameters: {
       type: "object",
       properties: {},

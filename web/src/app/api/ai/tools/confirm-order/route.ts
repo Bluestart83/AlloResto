@@ -136,32 +136,32 @@ export async function POST(req: NextRequest) {
     source: "phone_ai",
   };
 
-  // Auto-compute order size and scheduling
-  const itemCount = resolvedItems.length || 1;
-  orderData.orderSize = classifyOrderSize(itemCount);
-
   try {
-    const scheduling = await scheduleOrder(
-      restaurantId,
-      itemCount,
-      orderType,
-      estimatedReadyAt ? new Date(estimatedReadyAt) : null,
-      0,
-    );
-    if (scheduling) {
-      orderData.cookStartAt = scheduling.cookStartAt;
-      orderData.handoffAt = scheduling.handoffAt;
-      if (!orderData.estimatedReadyAt) {
-        orderData.estimatedReadyAt = scheduling.estimatedReadyAt;
+    // Auto-compute order size and scheduling
+    const itemCount = resolvedItems.length || 1;
+    orderData.orderSize = classifyOrderSize(itemCount);
+
+    try {
+      const scheduling = await scheduleOrder(
+        restaurantId,
+        itemCount,
+        orderType,
+        estimatedReadyAt ? new Date(estimatedReadyAt) : null,
+        0,
+      );
+      if (scheduling) {
+        orderData.cookStartAt = scheduling.cookStartAt;
+        orderData.handoffAt = scheduling.handoffAt;
+        if (!orderData.estimatedReadyAt) {
+          orderData.estimatedReadyAt = scheduling.estimatedReadyAt;
+        }
       }
+    } catch (e) {
+      console.warn("[confirm-order] scheduling failed:", e);
     }
-  } catch (e) {
-    console.warn("[confirm-order] scheduling failed:", e);
-  }
 
-  const ds = await getDb();
+    const ds = await getDb();
 
-  try {
     const order = ds.getRepository(Order).create(orderData as Partial<Order>) as Order;
     const savedOrder = await ds.getRepository(Order).save(order) as Order;
 
