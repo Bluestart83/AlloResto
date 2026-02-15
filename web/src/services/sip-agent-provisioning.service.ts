@@ -216,6 +216,7 @@ export async function updateAgent(
     sipDomain?: string;
     sipUsername?: string;
     sipPassword?: string;
+    isActive?: boolean;
   }
 ): Promise<void> {
   try {

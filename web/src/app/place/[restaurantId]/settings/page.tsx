@@ -761,7 +761,7 @@ export default function SettingsPage() {
                         Mot de passe SIP
                         {sipHasPassword && <span className="badge bg-success ms-2">Configuré</span>}
                       </label>
-                      <input className="form-control" type="password" value={sipPassword} onChange={(e) => setSipPassword(e.target.value)} placeholder={sipHasPassword ? "Laisser vide pour ne pas changer" : "Mot de passe SIP"} />
+                      <input className="form-control" type="password" value={sipPassword} onChange={(e) => setSipPassword(e.target.value)} placeholder={sipHasPassword ? "Laisser vide pour ne pas changer" : "Mot de passe SIP"} autoComplete="new-password" name="sip-password-no-autofill" />
                     </div>
                   </>
                 ) : (
