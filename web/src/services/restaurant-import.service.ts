@@ -17,6 +17,8 @@
 export interface ImportedRestaurant {
   name: string;
   cuisine_type: string;
+  description: string | null;
+  categories: string[];
   address: string;
   city: string;
   postal_code: string;
@@ -114,6 +116,8 @@ interface PlaceDetails {
   websiteUri?: string;
   primaryType?: string;
   types?: string[];
+  editorialSummary?: { text: string; languageCode: string };
+  reviews?: { text?: { text: string }; rating: number; originalText?: { text: string } }[];
   location: { latitude: number; longitude: number };
   regularOpeningHours?: {
     periods: { open: { day: number; hour: number; minute: number }; close?: { day: number; hour: number; minute: number } }[];
@@ -265,7 +269,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | n
   const fieldMask = [
     "id", "displayName", "formattedAddress", "nationalPhoneNumber",
     "websiteUri", "location", "regularOpeningHours", "addressComponents",
-    "primaryType", "types",
+    "primaryType", "types", "editorialSummary", "reviews",
   ].join(",");
 
   const resp = await fetch(
@@ -465,6 +469,45 @@ function extractAddressParts(components: PlaceDetails["addressComponents"]) {
 }
 
 /**
+ * Fallback IA : genere une description de specialite a partir des reviews Google.
+ * Appele uniquement si editorialSummary absent.
+ */
+async function extractDescriptionFromReviews(details: PlaceDetails): Promise<string | null> {
+  try {
+    const openai = getOpenAI();
+    const reviewTexts = (details.reviews || [])
+      .filter((r) => r.text?.text || r.originalText?.text)
+      .slice(0, 10)
+      .map((r) => r.originalText?.text || r.text?.text || "")
+      .join("\n---\n");
+
+    if (!reviewTexts) return null;
+
+    const types = (details.types || []).join(", ");
+    const resp = await openai.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.3,
+      max_tokens: 300,
+      messages: [
+        {
+          role: "system",
+          content: `Tu es un expert en restauration. A partir des avis clients et du type de restaurant, genere une description courte (2-3 phrases max) de la specialite et de l'ambiance du restaurant. Reponds UNIQUEMENT avec la description, sans guillemets ni prefixe.`,
+        },
+        {
+          role: "user",
+          content: `Restaurant : ${details.displayName.text}\nTypes Google : ${types}\n\nAvis clients :\n${reviewTexts}`,
+        },
+      ],
+    });
+
+    return resp.choices[0]?.message?.content?.trim() || null;
+  } catch (err) {
+    console.error("[extractDescriptionFromReviews] error:", err);
+    return null;
+  }
+}
+
+/**
  * Import complet depuis Google Places
  */
 export async function importFromGooglePlaces(placeId: string): Promise<Partial<ImportResult>> {
@@ -481,9 +524,24 @@ export async function importFromGooglePlaces(placeId: string): Promise<Partial<I
   const placePhotos = await fetchPlacePhotos(placeId);
   const gallery = placePhotos.map((p) => getPlacePhotoUrl(p.name));
 
+  // Description : editorialSummary Google, sinon fallback IA
+  let description: string | null = details.editorialSummary?.text || null;
+  if (!description && details.reviews?.length) {
+    description = await extractDescriptionFromReviews(details);
+  }
+
+  // Categories : tous les types Google traduits en français (dedupliqués)
+  const allCategories = [...new Set(
+    (details.types || [])
+      .map((t) => GOOGLE_TYPE_TO_CUISINE[t])
+      .filter(Boolean)
+  )];
+
   const restaurant: ImportedRestaurant = {
     name: details.displayName.text,
     cuisine_type: detectCuisineType(details),
+    description,
+    categories: allCategories,
     address: streetAddress || details.formattedAddress,
     city,
     postal_code: postalCode,
@@ -1017,6 +1075,8 @@ export async function importRestaurant(sources: ImportSource[]): Promise<ImportR
     result.restaurant = {
       name: "Restaurant à configurer",
       cuisine_type: "other",
+      description: null,
+      categories: [],
       address: "",
       city: "",
       postal_code: "",
@@ -1069,6 +1129,8 @@ export async function persistImport(data: ImportResult): Promise<string> {
   const restaurant = ds.getRepository(Restaurant).create({
     name: r.name,
     cuisineType: r.cuisine_type || "other",
+    description: r.description || null,
+    categories: r.categories || [],
     address: r.address,
     city: r.city,
     postalCode: r.postal_code,

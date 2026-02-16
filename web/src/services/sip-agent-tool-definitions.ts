@@ -10,6 +10,7 @@ export interface ToolDef {
   http: Record<string, any> | null;
   contextUpdates?: Record<string, string>;
   extraCostResponseField?: string;
+  condition?: { configKey: string; operator: "eq" | "neq" | "truthy" | "falsy"; value?: any };
   triggersHangup?: boolean;
   triggersTransfer?: boolean;
   mutesClientAudio?: boolean;
@@ -17,7 +18,7 @@ export interface ToolDef {
   sortOrder: number;
 }
 
-const BASE = "{{BASE_URL}}";
+const BASE = "={{BASE_URL}}";
 
 export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   // ─── check_availability ───
@@ -46,24 +47,24 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "POST",
       url: `${BASE}/api/availability/check`,
       bodyTemplate: {
-        restaurantId: "{{config.restaurantId}}",
-        mode: "{{args.mode}}",
-        requestedTime: "{{args.requested_time}}",
-        customerAddress: "{{args.customer_address}}",
-        customerCity: "{{args.customer_city}}",
-        customerPostalCode: "{{args.customer_postal_code}}",
-        partySize: "{{args.party_size}}",
-        seatingPreference: "{{args.seating_preference}}",
-        customerLat: "{{ctx.customer_delivery_lat}}",
-        customerLng: "{{ctx.customer_delivery_lng}}",
+        restaurantId: "={{config.restaurantId}}",
+        mode: "={{$ai.mode}}",
+        requestedTime: "={{$ai.requested_time}}",
+        customerAddress: "={{$ai.customer_address}}",
+        customerCity: "={{$ai.customer_city}}",
+        customerPostalCode: "={{$ai.customer_postal_code}}",
+        partySize: "={{$ai.party_size}}",
+        seatingPreference: "={{$ai.seating_preference}}",
+        customerLat: "={{ctx.customer_delivery_lat}}",
+        customerLng: "={{ctx.customer_delivery_lng}}",
       },
     },
     contextUpdates: {
-      last_availability_check: "$response",
-      customer_delivery_lat: "$.customerLat",
-      customer_delivery_lng: "$.customerLng",
+      last_availability_check: "={{$res}}",
+      customer_delivery_lat: "={{$res.customerLat}}",
+      customer_delivery_lng: "={{$res.customerLng}}",
     },
-    extraCostResponseField: "$.apiCosts",
+    extraCostResponseField: "={{$res.apiCosts}}",
     sortOrder: 1,
   },
 
@@ -115,20 +116,20 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "POST",
       url: `${BASE}/api/ai/tools/confirm-order`,
       bodyTemplate: {
-        restaurantId: "{{config.restaurantId}}",
-        order_type: "{{args.order_type}}",
-        items: "{{args.items}}",
-        total: "{{args.total}}",
-        subtotal: "{{args.subtotal}}",
-        delivery_fee: "{{args.delivery_fee}}",
-        payment_method: "{{args.payment_method}}",
-        notes: "{{args.notes}}",
-        item_map: "{{ctx.item_map}}",
-        call_id: "{{ctx.call_id}}",
-        customer_id: "{{ctx.customer_id}}",
-        customer_name: "{{ctx.customer_name}}",
-        caller_phone: "{{ctx.caller_phone}}",
-        last_availability_check: "{{ctx.last_availability_check}}",
+        restaurantId: "={{config.restaurantId}}",
+        order_type: "={{$ai.order_type}}",
+        items: "={{$ai.items}}",
+        total: "={{$ai.total}}",
+        subtotal: "={{$ai.subtotal}}",
+        delivery_fee: "={{$ai.delivery_fee}}",
+        payment_method: "={{$ai.payment_method}}",
+        notes: "={{$ai.notes}}",
+        item_map: "={{ctx.item_map}}",
+        call_id: "={{ctx.call_id}}",
+        customer_id: "={{ctx.customer_id}}",
+        customer_name: "={{ctx.customer_name}}",
+        caller_phone: "={{ctx.caller_phone}}",
+        last_availability_check: "={{ctx.last_availability_check}}",
       },
     },
     sortOrder: 2,
@@ -138,6 +139,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "confirm_reservation",
     description: "Enregistre une reservation de table. REGLES : check_availability mode=reservation DOIT avoir ete appele avant et avoir retourne OK. Demander nom, telephone, nombre de personnes et heure au client.",
+    condition: { configKey: "reservationEnabled", operator: "truthy" },
     parameters: {
       type: "object",
       properties: {
@@ -160,16 +162,16 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "POST",
       url: `${BASE}/api/reservations`,
       bodyTemplate: {
-        restaurantId: "{{config.restaurantId}}",
-        callId: "{{ctx.call_id}}",
-        customerId: "{{ctx.customer_id}}",
-        customerName: "{{args.customer_name}}",
-        customerPhone: "{{args.customer_phone}}",
-        partySize: "{{args.party_size}}",
-        reservationTime: "{{ctx.last_availability_check.estimatedTimeISO}}",
+        restaurantId: "={{config.restaurantId}}",
+        callId: "={{ctx.call_id}}",
+        customerId: "={{ctx.customer_id}}",
+        customerName: "={{$ai.customer_name}}",
+        customerPhone: "={{$ai.customer_phone}}",
+        partySize: "={{$ai.party_size}}",
+        reservationTime: "={{ctx.last_availability_check.estimatedTimeISO}}",
         status: "confirmed",
-        seatingPreference: "{{args.seating_preference}}",
-        notes: "{{args.notes}}",
+        seatingPreference: "={{$ai.seating_preference}}",
+        notes: "={{$ai.notes}}",
       },
     },
     sortOrder: 3,
@@ -193,20 +195,20 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "POST",
       url: `${BASE}/api/customers`,
       bodyTemplate: {
-        restaurantId: "{{config.restaurantId}}",
-        phone: "{{ctx.caller_phone}}",
-        firstName: "{{args.first_name}}",
-        deliveryAddress: "{{args.delivery_address}}",
-        deliveryCity: "{{args.delivery_city}}",
-        deliveryPostalCode: "{{args.delivery_postal_code}}",
-        deliveryNotes: "{{args.delivery_notes}}",
-        deliveryLat: "{{ctx.customer_delivery_lat}}",
-        deliveryLng: "{{ctx.customer_delivery_lng}}",
+        restaurantId: "={{config.restaurantId}}",
+        phone: "={{ctx.caller_phone}}",
+        firstName: "={{$ai.first_name}}",
+        deliveryAddress: "={{$ai.delivery_address}}",
+        deliveryCity: "={{$ai.delivery_city}}",
+        deliveryPostalCode: "={{$ai.delivery_postal_code}}",
+        deliveryNotes: "={{$ai.delivery_notes}}",
+        deliveryLat: "={{ctx.customer_delivery_lat}}",
+        deliveryLng: "={{ctx.customer_delivery_lng}}",
       },
     },
     contextUpdates: {
-      customer_id: "$.id",
-      customer_name: "$.firstName",
+      customer_id: "={{$res.id}}",
+      customer_name: "={{$res.firstName}}",
     },
     sortOrder: 4,
   },
@@ -243,10 +245,10 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "POST",
       url: `${BASE}/api/faq`,
       bodyTemplate: {
-        restaurantId: "{{config.restaurantId}}",
-        question: "{{args.question}}",
-        category: "{{args.category}}",
-        callerPhone: "{{ctx.caller_phone}}",
+        restaurantId: "={{config.restaurantId}}",
+        question: "={{$ai.question}}",
+        category: "={{$ai.category}}",
+        callerPhone: "={{ctx.caller_phone}}",
       },
       responseMapping: {
         success: "true",
@@ -278,13 +280,13 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "POST",
       url: `${BASE}/api/messages`,
       bodyTemplate: {
-        restaurantId: "{{config.restaurantId}}",
-        callId: "{{ctx.call_id}}",
-        callerPhone: "{{ctx.caller_phone}}",
-        callerName: "{{args.caller_name}}",
-        content: "{{args.content}}",
-        category: "{{args.category}}",
-        isUrgent: "{{args.is_urgent}}",
+        restaurantId: "={{config.restaurantId}}",
+        callId: "={{ctx.call_id}}",
+        callerPhone: "={{ctx.caller_phone}}",
+        callerName: "={{$ai.caller_name}}",
+        content: "={{$ai.content}}",
+        category: "={{$ai.category}}",
+        isUrgent: "={{$ai.is_urgent}}",
       },
       responseMapping: {
         success: "true",
@@ -298,6 +300,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "check_order_status",
     description: "Recherche les commandes recentes du client. Utiliser quand le client demande ou en est sa commande. Le telephone est recupere automatiquement du contexte de l'appel.",
+    condition: { configKey: "orderStatusEnabled", operator: "truthy" },
     parameters: {
       type: "object",
       properties: {
@@ -307,7 +310,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
     },
     http: {
       method: "GET",
-      url: `${BASE}/api/orders/status?restaurantId={{config.restaurantId}}&phone={{args.customer_phone}}`,
+      url: `${BASE}/api/orders/status?restaurantId={{config.restaurantId}}&phone={{$ai.customer_phone}}`,
     },
     sortOrder: 7,
   },
@@ -316,6 +319,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "cancel_order",
     description: "Annule une commande du client. Possible uniquement si la commande est en statut 'pending' ou 'confirmed'. Demander confirmation au client avant d'annuler.",
+    condition: { configKey: "orderStatusEnabled", operator: "truthy" },
     parameters: {
       type: "object",
       properties: {
@@ -327,9 +331,9 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "POST",
       url: `${BASE}/api/ai/tools/cancel-order`,
       bodyTemplate: {
-        restaurantId: "{{config.restaurantId}}",
-        order_number: "{{args.order_number}}",
-        caller_phone: "{{ctx.caller_phone}}",
+        restaurantId: "={{config.restaurantId}}",
+        order_number: "={{$ai.order_number}}",
+        caller_phone: "={{ctx.caller_phone}}",
       },
     },
     sortOrder: 8,
@@ -339,6 +343,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "lookup_reservation",
     description: "Recherche les reservations a venir du client. Utiliser quand le client veut verifier, modifier ou annuler une reservation existante.",
+    condition: { configKey: "reservationEnabled", operator: "truthy" },
     parameters: {
       type: "object",
       properties: {
@@ -348,7 +353,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
     },
     http: {
       method: "GET",
-      url: `${BASE}/api/reservations/lookup?restaurantId={{config.restaurantId}}&phone={{args.customer_phone}}`,
+      url: `${BASE}/api/reservations/lookup?restaurantId={{config.restaurantId}}&phone={{$ai.customer_phone}}`,
     },
     sortOrder: 9,
   },
@@ -357,6 +362,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "cancel_reservation",
     description: "Annule une reservation existante. Utiliser lookup_reservation d'abord pour trouver l'ID de la reservation. Demander confirmation au client avant d'annuler.",
+    condition: { configKey: "reservationEnabled", operator: "truthy" },
     parameters: {
       type: "object",
       properties: {
@@ -368,7 +374,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
       method: "PATCH",
       url: `${BASE}/api/reservations`,
       bodyTemplate: {
-        id: "{{args.reservation_id}}",
+        id: "={{$ai.reservation_id}}",
         status: "cancelled",
       },
       responseMapping: {
@@ -383,6 +389,7 @@ export const ALLORESTO_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "transfer_call",
     description: "Transfere l'appel vers un employe du restaurant. Utiliser UNIQUEMENT si le client demande explicitement a parler a quelqu'un, ou si tu ne peux pas du tout repondre a sa demande.",
+    condition: { configKey: "transferEnabled", operator: "truthy" },
     parameters: {
       type: "object",
       properties: {

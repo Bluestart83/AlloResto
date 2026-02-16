@@ -34,6 +34,35 @@ A chaque nouvel appel, sip-agent-server :
 
 ---
 
+## Donnees restaurant dans le prompt
+
+Le prompt systeme genere par `ai-prompt.service.ts` inclut une section `INFORMATIONS RESTAURANT` :
+
+```
+INFORMATIONS RESTAURANT :
+- Nom : Chez Luigi
+- Type : italien
+- Categories : italien, pizza
+- Description : Restaurant italien familial specialise dans les pizzas napolitaines cuites au feu de bois...
+- Adresse : 12 rue de la Paix, 75002 Paris
+- Telephone : 01 23 45 67 89
+- Services disponibles : sur place, a emporter, en livraison
+```
+
+### Sources des donnees
+
+| Champ | Source | Stockage BDD |
+|-------|--------|-------------|
+| `cuisineType` | Google Places `primaryType` traduit (mapping `GOOGLE_TYPE_TO_CUISINE`) | `Restaurant.cuisineType` (varchar 50) |
+| `categories` | Tous les `types[]` Google traduits en francais (dedupliques) | `Restaurant.categories` (JSON array) |
+| `description` | `editorialSummary` Google Places (prioritaire), sinon extraction IA depuis les reviews | `Restaurant.description` (text) |
+
+### Extraction IA description (fallback)
+
+Si `editorialSummary` n'est pas disponible dans Google Places, un appel GPT-4o genere une description courte (2-3 phrases) a partir des avis clients et du type de restaurant. Fonction `extractDescriptionFromReviews()` dans `restaurant-import.service.ts`.
+
+---
+
 ## Format de reponse /api/ai
 
 ```json

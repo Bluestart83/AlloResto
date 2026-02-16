@@ -110,6 +110,8 @@ interface RestaurantData {
   id: string;
   name: string;
   cuisineType: string;
+  description: string | null;
+  categories: string[];
   address: string | null;
   city: string | null;
   postalCode: string | null;
@@ -166,6 +168,9 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [newHour, setNewHour] = useState("");
   const [newGalleryUrl, setNewGalleryUrl] = useState("");
+  const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+  const [catFilter, setCatFilter] = useState("");
+  const [copied, setCopied] = useState(false);
 
   // SIP config state
   const [sipEnabled, setSipEnabled] = useState(false);
@@ -383,6 +388,68 @@ export default function SettingsPage() {
                 ))}
               </select>
             </div>
+            <div className="col-12">
+              <label className="form-label">Categories</label>
+              <div className="d-flex flex-wrap gap-1 mb-2">
+                {(data.categories || []).map((cat) => (
+                  <span key={cat} className="badge bg-primary d-flex align-items-center gap-1" style={{ fontSize: "0.8rem" }}>
+                    {CUISINE_TYPES.find((t) => t.value === cat)?.label || cat}
+                    <button
+                      type="button"
+                      className="btn-close btn-close-white ms-1"
+                      style={{ fontSize: "0.5rem" }}
+                      onClick={() => update("categories", data.categories.filter((c) => c !== cat))}
+                    />
+                  </span>
+                ))}
+                <div className="position-relative">
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary btn-sm"
+                    onClick={() => { setCatDropdownOpen(!catDropdownOpen); setCatFilter(""); }}
+                  >
+                    <i className="bi bi-plus me-1" />Ajouter
+                  </button>
+                  {catDropdownOpen && (
+                    <div className="position-absolute bg-white border rounded shadow-sm mt-1" style={{ zIndex: 50, minWidth: 220, maxHeight: 250, overflowY: "auto" }}>
+                      <div className="p-2 border-bottom">
+                        <input
+                          className="form-control form-control-sm"
+                          placeholder="Filtrer..."
+                          value={catFilter}
+                          onChange={(e) => setCatFilter(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      {CUISINE_TYPES
+                        .filter((t) => t.value !== "other" && !(data.categories || []).includes(t.value))
+                        .filter((t) => !catFilter || t.label.toLowerCase().includes(catFilter.toLowerCase()))
+                        .map((t) => (
+                          <button
+                            key={t.value}
+                            type="button"
+                            className="dropdown-item px-3 py-1"
+                            style={{ fontSize: "0.85rem" }}
+                            onClick={() => {
+                              update("categories", [...(data.categories || []), t.value]);
+                              setCatDropdownOpen(false);
+                              setCatFilter("");
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="form-text">Categories du restaurant (issues de Google Places ou manuelles).</div>
+            </div>
+            <div className="col-12">
+              <label className="form-label">Description</label>
+              <textarea className="form-control" rows={3} value={data.description || ""} onChange={(e) => update("description", e.target.value || null)} placeholder="Description du restaurant (specialites, ambiance, ...)" />
+              <div className="form-text">Extraite de Google Places ou saisie manuellement. Utilisee dans le prompt IA et la page publique.</div>
+            </div>
             <div className="col-md-4">
               <label className="form-label">Téléphone</label>
               <input className={`form-control ${data.phone && !isValidE164(data.phone) ? "is-invalid" : ""}`} value={formatPhoneDisplay(data.phone || "")} onChange={(e) => update("phone", e.target.value.replace(/[\s.\-()]/g, "") || null)} placeholder="+33..." />
@@ -393,8 +460,45 @@ export default function SettingsPage() {
               <input className="form-control" value={data.website || ""} onChange={(e) => update("website", e.target.value || null)} />
             </div>
             <div className="col-md-4">
-              <label className="form-label">URL du menu</label>
+              <label className="form-label">URL du menu (Google)</label>
               <input className="form-control" value={data.menuUrl || ""} onChange={(e) => update("menuUrl", e.target.value || null)} />
+            </div>
+            <div className="col-12">
+              {(() => {
+                const publicUrl = typeof window !== "undefined" ? `${window.location.origin}/r/${restaurantId}` : `/r/${restaurantId}`;
+                return (
+                  <div className="d-flex align-items-start gap-3">
+                    <div>
+                      <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="d-flex align-items-center gap-1">
+                        <i className="bi bi-box-arrow-up-right" />
+                        Page publique du restaurant
+                      </a>
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm p-0 text-muted"
+                        onClick={() => {
+                          navigator.clipboard.writeText(publicUrl);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                      >
+                        <i className={`bi ${copied ? "bi-check-lg text-success" : "bi-clipboard"} me-1`} />
+                        {copied ? "Copie !" : "Copier le lien"}
+                      </button>
+                    </div>
+                    <div className="text-center" style={{ maxWidth: 120 }}>
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(publicUrl)}`}
+                        alt="QR Code page publique"
+                        width={120}
+                        height={120}
+                        className="border rounded"
+                      />
+                      <div className="text-muted small mt-1">QR code</div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div className="col-12">
               <div className="form-check form-switch">

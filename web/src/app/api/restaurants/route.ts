@@ -112,6 +112,12 @@ export async function PATCH(req: NextRequest) {
       timezone: saved.timezone,
       contactEmail: saved.contactEmail,
       phone: saved.phone,
+      deliveryEnabled: saved.deliveryEnabled,
+      reservationEnabled: saved.reservationEnabled,
+      orderStatusEnabled: saved.orderStatusEnabled,
+      transferEnabled: saved.transferEnabled,
+      transferPhoneNumber: saved.transferPhoneNumber,
+      transferAutomatic: saved.transferAutomatic,
       sip,
     });
     if (agentId || finalCustomerId) {
@@ -120,12 +126,29 @@ export async function PATCH(req: NextRequest) {
       await ds.getRepository(Restaurant).save(saved);
     }
   }
-  // Agent existant → sync nom/voix/timezone si changé
+  // Agent existant → sync nom/voix/timezone/config flags si changé
   else if (saved.agentId) {
-    const agentUpdates: Record<string, string> = {};
+    const agentUpdates: Record<string, any> = {};
     if (saved.name !== oldName) agentUpdates.name = saved.name;
     if (saved.aiVoice !== oldVoice) agentUpdates.aiVoice = saved.aiVoice;
     if (saved.timezone !== oldTimezone) agentUpdates.timezone = saved.timezone;
+
+    // Sync config flags pour conditions tools
+    const configFlags = {
+      deliveryEnabled: saved.deliveryEnabled,
+      reservationEnabled: saved.reservationEnabled,
+      orderStatusEnabled: saved.orderStatusEnabled,
+      transferEnabled: !!(saved.transferEnabled && saved.transferPhoneNumber && !saved.transferAutomatic),
+    };
+    if (
+      configFlags.deliveryEnabled !== restaurant.deliveryEnabled ||
+      configFlags.reservationEnabled !== restaurant.reservationEnabled ||
+      configFlags.orderStatusEnabled !== restaurant.orderStatusEnabled ||
+      configFlags.transferEnabled !== !!(restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic)
+    ) {
+      agentUpdates.config = configFlags;
+    }
+
     if (Object.keys(agentUpdates).length > 0) {
       await updateAgent(saved.agentId, agentUpdates);
     }

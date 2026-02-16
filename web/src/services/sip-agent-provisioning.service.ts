@@ -112,6 +112,12 @@ export async function provisionAgent(restaurant: {
   timezone: string;
   contactEmail?: string | null;
   phone?: string | null;
+  deliveryEnabled?: boolean;
+  reservationEnabled?: boolean;
+  orderStatusEnabled?: boolean;
+  transferEnabled?: boolean;
+  transferPhoneNumber?: string | null;
+  transferAutomatic?: boolean;
   sip?: {
     domain: string;
     username: string;
@@ -131,7 +137,7 @@ export async function provisionAgent(restaurant: {
         accountId,
         finalCustomerId,
         name: restaurant.name,
-        basePrompt: "",
+        basePrompt: "={{data.systemPrompt}}",
         aiModel: "gpt-realtime",
         aiVoice: restaurant.aiVoice || "sage",
         vadThreshold: 0.5,
@@ -142,9 +148,15 @@ export async function provisionAgent(restaurant: {
         timezone: restaurant.timezone || "Europe/Paris",
         apiBaseUrl: ALLORESTO_URL,
         maxCallDurationSec: 600,
-        onCallEndWebhook: `${ALLORESTO_URL}/api/calls`,
-        externalSessionUrl: `${ALLORESTO_URL}/api/ai?restaurantId={{config.restaurantId}}&callerPhone={{callerPhone}}`,
-        config: { restaurantId: restaurant.id },
+        onCallEndWebhook: `={{BASE_URL}}/api/calls`,
+        externalSessionUrl: `=${ALLORESTO_URL}/api/ai?restaurantId={{config.restaurantId}}&callerPhone={{callerPhone}}`,
+        config: {
+          restaurantId: restaurant.id,
+          deliveryEnabled: restaurant.deliveryEnabled ?? true,
+          reservationEnabled: restaurant.reservationEnabled ?? false,
+          orderStatusEnabled: restaurant.orderStatusEnabled ?? true,
+          transferEnabled: !!(restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic),
+        },
         sipDomain: restaurant.sip?.domain || null,
         sipUsername: restaurant.sip?.username || null,
         sipPassword: restaurant.sip?.password || null,
@@ -178,6 +190,7 @@ export async function provisionAgent(restaurant: {
           parameters: toolDef.parameters,
           http: toolDef.http,
           contextUpdates: toolDef.contextUpdates || null,
+          condition: toolDef.condition || null,
           extraCostResponseField: toolDef.extraCostResponseField || null,
           triggersHangup: toolDef.triggersHangup || false,
           triggersTransfer: toolDef.triggersTransfer || false,
@@ -205,6 +218,87 @@ export async function provisionAgent(restaurant: {
   }
 }
 
+// ─── Brain Config Generator ──────────────────────────────────────────────────
+// Genere le brain JSON pour AlloResto, pret a pusher via PUT /api/agents/:id/brain
+
+const BRAIN_VERSION = "1.0.0";
+
+export function buildBrainConfig() {
+  return {
+    prompt: "={{data.systemPrompt}}",
+    tools: ALLORESTO_TOOL_DEFINITIONS.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+      http: t.http,
+      contextUpdates: t.contextUpdates || null,
+      condition: t.condition || null,
+      extraCostResponseField: t.extraCostResponseField || null,
+      triggersHangup: t.triggersHangup || false,
+      triggersTransfer: t.triggersTransfer || false,
+      mutesClientAudio: t.mutesClientAudio || false,
+      skipResponseCreate: t.skipResponseCreate || false,
+      sortOrder: t.sortOrder,
+    })),
+    version: BRAIN_VERSION,
+  };
+}
+
+/**
+ * Push le brain vers un agent existant.
+ * Utiliser apres un deploiement pour mettre a jour le prompt/tools.
+ */
+export async function pushBrain(agentId: string): Promise<boolean> {
+  try {
+    const brain = buildBrainConfig();
+    const resp = await sipFetch(`/agents/${agentId}/brain`, {
+      method: "PUT",
+      body: JSON.stringify(brain),
+    });
+    if (!resp.ok) {
+      console.error(`[sip-provisioning] Brain push failed for ${agentId}: ${resp.status}`);
+      return false;
+    }
+    console.log(`[sip-provisioning] Brain v${BRAIN_VERSION} pushed to agent ${agentId}`);
+    return true;
+  } catch (err) {
+    console.error(`[sip-provisioning] Brain push failed for ${agentId}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Push le brain vers TOUS les agents AlloResto.
+ * Appeler apres un deploiement qui change le prompt ou les tools.
+ */
+export async function pushBrainToAll(): Promise<{ success: number; failed: number }> {
+  let success = 0;
+  let failed = 0;
+  try {
+    const accountId = await ensureAccount();
+    const resp = await sipFetch(`/agents?accountId=${accountId}`);
+    if (!resp.ok) return { success, failed };
+    const agents = (await resp.json()) as { id: string; name: string }[];
+    for (const agent of agents) {
+      // Push brain (prompt + tools)
+      const ok = await pushBrain(agent.id);
+      if (ok) success++;
+      else failed++;
+
+      // MAJ URLs avec convention =
+      await updateAgent(agent.id, {
+        apiBaseUrl: ALLORESTO_URL,
+        externalSessionUrl: `=${ALLORESTO_URL}/api/ai?restaurantId={{config.restaurantId}}&callerPhone={{callerPhone}}`,
+        onCallEndWebhook: `={{BASE_URL}}/api/calls`,
+      });
+    }
+    console.log(`[sip-provisioning] Brain push complete: ${success} OK, ${failed} failed`);
+  } catch (err) {
+    console.error("[sip-provisioning] Brain push to all failed:", err);
+  }
+  return { success, failed };
+}
+
 // ─── Update ───────────────────────────────────────────────────────────────────
 
 export async function updateAgent(
@@ -217,6 +311,10 @@ export async function updateAgent(
     sipUsername?: string;
     sipPassword?: string;
     isActive?: boolean;
+    apiBaseUrl?: string;
+    externalSessionUrl?: string;
+    onCallEndWebhook?: string;
+    config?: Record<string, any>;
   }
 ): Promise<void> {
   try {

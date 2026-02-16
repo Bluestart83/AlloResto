@@ -35,6 +35,12 @@ export class Restaurant {
   cuisineType!: string;
 
   @Column({ type: "text", nullable: true })
+  description!: string | null;
+
+  @Column({ type: "simple-json", default: "[]" })
+  categories!: string[];
+
+  @Column({ type: "text", nullable: true })
   address!: string | null;
 
   @Column({ type: "varchar", length: 100, nullable: true })

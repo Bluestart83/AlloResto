@@ -688,7 +688,7 @@ STYLE VOCAL :
 
 INFORMATIONS RESTAURANT :
 - Nom : ${restaurant.name}
-- Type : ${restaurant.cuisineType || "autre"}
+- Type : ${restaurant.cuisineType || "autre"}${(restaurant.categories?.length) ? `\n- Categories : ${restaurant.categories.join(", ")}` : ""}${restaurant.description ? `\n- Description : ${restaurant.description}` : ""}
 - Adresse : ${restaurant.address || ""}${restaurant.postalCode ? `, ${restaurant.postalCode}` : ""} ${restaurant.city || ""}
 - Telephone : ${restaurant.phone || "non communique"}
 - Services disponibles : ${modesText}

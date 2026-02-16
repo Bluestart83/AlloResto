@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+type PushState = "idle" | "pushing" | "done" | "error";
+
 interface AgentInfo {
   id: string;
   name: string;
@@ -24,6 +26,8 @@ export default function ServersPage() {
   const [activeCallsMap, setActiveCallsMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [serverOnline, setServerOnline] = useState(false);
+  const [pushState, setPushState] = useState<PushState>("idle");
+  const [pushResult, setPushResult] = useState<{ success: number; failed: number } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -52,6 +56,24 @@ export default function ServersPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  async function handlePushBrain() {
+    setPushState("pushing");
+    setPushResult(null);
+    try {
+      const resp = await fetch("/api/admin/push-brain", { method: "POST" });
+      if (resp.ok) {
+        const data = await resp.json();
+        setPushResult(data);
+        setPushState("done");
+        fetchData();
+      } else {
+        setPushState("error");
+      }
+    } catch {
+      setPushState("error");
+    }
+  }
+
   const totalCalls = Object.values(activeCallsMap).reduce((sum, n) => sum + n, 0);
 
   return (
@@ -63,9 +85,35 @@ export default function ServersPage() {
             {agents.length} agent(s) &middot; {totalCalls} appel(s) en cours
           </small>
         </div>
-        <button className="btn btn-outline-primary btn-sm" onClick={fetchData}>
-          <i className="bi bi-arrow-clockwise me-1"></i>Rafra&icirc;chir
-        </button>
+        <div className="d-flex gap-2 align-items-center">
+          <button
+            className="btn btn-outline-warning btn-sm"
+            onClick={handlePushBrain}
+            disabled={pushState === "pushing" || !serverOnline}
+            title="Mettre a jour le brain (prompt + tools) sur tous les agents"
+          >
+            {pushState === "pushing" ? (
+              <span className="spinner-border spinner-border-sm me-1" />
+            ) : (
+              <i className="bi bi-lightning-charge me-1"></i>
+            )}
+            Push Brain
+          </button>
+          {pushState === "done" && pushResult && (
+            <small className="text-success">
+              <i className="bi bi-check-circle me-1"></i>
+              {pushResult.success} OK{pushResult.failed > 0 && `, ${pushResult.failed} echec`}
+            </small>
+          )}
+          {pushState === "error" && (
+            <small className="text-danger">
+              <i className="bi bi-x-circle me-1"></i>Erreur
+            </small>
+          )}
+          <button className="btn btn-outline-primary btn-sm" onClick={fetchData}>
+            <i className="bi bi-arrow-clockwise me-1"></i>Rafra&icirc;chir
+          </button>
+        </div>
       </div>
 
       {!serverOnline && !loading && (

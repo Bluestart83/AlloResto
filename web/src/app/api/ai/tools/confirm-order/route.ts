@@ -61,8 +61,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Resolve estimatedReadyAt from context
-  let estimatedReadyAt = availability.estimatedTimeISO;
-  let heureStr = availability.estimatedTime || "";
+  let estimatedReadyAt = availability?.estimatedTimeISO;
+  let heureStr = availability?.estimatedTime || "";
 
   if (!estimatedReadyAt) {
     const readyDate = new Date(Date.now() + 30 * 60_000);
