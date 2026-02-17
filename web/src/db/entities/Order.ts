@@ -9,10 +9,10 @@ import {
   OneToMany,
   JoinColumn,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
-import type { Customer } from "./Customer";
-import type { OrderItem } from "./OrderItem";
-import type { DeliveryTrip } from "./DeliveryTrip";
+import { Restaurant } from "./Restaurant";
+import { Customer } from "./Customer";
+import { OrderItem } from "./OrderItem";
+import { DeliveryTrip } from "./DeliveryTrip";
 
 export type OrderStatus =
   | "pending"
@@ -34,7 +34,7 @@ export class Order {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "orders")
+  @ManyToOne(() => Restaurant, r => r.orders)
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -45,7 +45,7 @@ export class Order {
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne("Customer", "orders", { nullable: true })
+  @ManyToOne(() => Customer, c => c.orders, { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 
@@ -128,7 +128,7 @@ export class Order {
   @Column({ name: "trip_id", type: "varchar", nullable: true })
   tripId!: string | null;
 
-  @ManyToOne("DeliveryTrip", { nullable: true })
+  @ManyToOne(() => DeliveryTrip, { nullable: true })
   @JoinColumn({ name: "trip_id" })
   trip!: DeliveryTrip | null;
 
@@ -139,6 +139,6 @@ export class Order {
   updatedAt!: Date;
 
   // --- Relations ---
-  @OneToMany("OrderItem", "order", { cascade: true })
+  @OneToMany(() => OrderItem, oi => oi.order, { cascade: true })
   items!: OrderItem[];
 }

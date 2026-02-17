@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
+import { Restaurant } from "./Restaurant";
 
 export type TripStatus = "planning" | "in_progress" | "completed" | "cancelled";
 
@@ -36,7 +36,7 @@ export class DeliveryTrip {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "deliveryTrips")
+  @ManyToOne(() => Restaurant, r => r.deliveryTrips)
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

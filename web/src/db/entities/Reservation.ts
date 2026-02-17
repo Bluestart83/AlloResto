@@ -8,12 +8,12 @@ import {
   JoinColumn,
   Index,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
-import type { Call } from "./Call";
-import type { Customer } from "./Customer";
-import type { DiningService } from "./DiningService";
-import type { DiningRoom } from "./DiningRoom";
-import type { Offer } from "./Offer";
+import { Restaurant } from "./Restaurant";
+import { Call } from "./Call";
+import { Customer } from "./Customer";
+import { DiningService } from "./DiningService";
+import { DiningRoom } from "./DiningRoom";
+import { Offer } from "./Offer";
 
 export type ReservationStatus =
   | "pending"
@@ -31,21 +31,21 @@ export class Reservation {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "reservations")
+  @ManyToOne(() => Restaurant, r => r.reservations)
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "call_id", type: "varchar", nullable: true })
   callId!: string | null;
 
-  @ManyToOne("Call", { nullable: true })
+  @ManyToOne(() => Call, { nullable: true })
   @JoinColumn({ name: "call_id" })
   call!: Call | null;
 
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne("Customer", "reservations", { nullable: true })
+  @ManyToOne(() => Customer, c => c.reservations, { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 
@@ -90,14 +90,14 @@ export class Reservation {
   @Column({ name: "service_id", type: "varchar", nullable: true })
   serviceId!: string | null;
 
-  @ManyToOne("DiningService", { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => DiningService, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "service_id" })
   diningService!: DiningService | null;
 
   @Column({ name: "dining_room_id", type: "varchar", nullable: true })
   diningRoomId!: string | null;
 
-  @ManyToOne("DiningRoom", { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => DiningRoom, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "dining_room_id" })
   diningRoom!: DiningRoom | null;
 
@@ -118,7 +118,7 @@ export class Reservation {
   @Column({ name: "offer_id", type: "varchar", nullable: true })
   offerId!: string | null;
 
-  @ManyToOne("Offer", { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => Offer, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "offer_id" })
   offer!: Offer | null;
 

@@ -6,8 +6,8 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
-import type { Call } from "./Call";
+import { Restaurant } from "./Restaurant";
+import { Call } from "./Call";
 
 export type MessageCategory =
   | "callback_request"
@@ -24,14 +24,14 @@ export class Message {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "messages")
+  @ManyToOne(() => Restaurant, r => r.messages)
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "call_id", type: "varchar", nullable: true })
   callId!: string | null;
 
-  @ManyToOne("Call", { nullable: true })
+  @ManyToOne(() => Call, { nullable: true })
   @JoinColumn({ name: "call_id" })
   call!: Call | null;
 

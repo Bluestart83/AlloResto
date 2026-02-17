@@ -6,7 +6,7 @@ import {
   OneToOne,
   JoinColumn,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
+import { Restaurant } from "./Restaurant";
 
 @Entity("phone_lines")
 export class PhoneLine {
@@ -16,7 +16,7 @@ export class PhoneLine {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @OneToOne("Restaurant", "phoneLine", { onDelete: "CASCADE" })
+  @OneToOne(() => Restaurant, r => r.phoneLine, { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

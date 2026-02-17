@@ -8,8 +8,8 @@ import {
   OneToMany,
   JoinColumn,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
-import type { DiningTable } from "./DiningTable";
+import { Restaurant } from "./Restaurant";
+import { DiningTable } from "./DiningTable";
 
 @Entity("dining_rooms")
 export class DiningRoom {
@@ -19,7 +19,7 @@ export class DiningRoom {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "diningRooms")
+  @ManyToOne(() => Restaurant, r => r.diningRooms)
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -45,6 +45,6 @@ export class DiningRoom {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt!: Date;
 
-  @OneToMany("DiningTable", "diningRoom")
+  @OneToMany(() => DiningTable, dt => dt.diningRoom)
   tables!: DiningTable[];
 }

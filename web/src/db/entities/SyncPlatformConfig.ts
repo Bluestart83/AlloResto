@@ -9,7 +9,7 @@ import {
   Unique,
   Index,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
+import { Restaurant } from "./Restaurant";
 
 @Entity("sync_platform_configs")
 @Unique(["restaurantId", "platform"])
@@ -20,7 +20,7 @@ export class SyncPlatformConfig {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "syncPlatformConfigs", { onDelete: "CASCADE" })
+  @ManyToOne(() => Restaurant, r => r.syncPlatformConfigs, { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

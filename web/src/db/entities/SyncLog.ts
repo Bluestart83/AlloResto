@@ -6,7 +6,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
+import { Restaurant } from "./Restaurant";
 
 export type SyncDirection = "inbound" | "outbound";
 export type SyncAction =
@@ -27,7 +27,7 @@ export class SyncLog {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", { onDelete: "CASCADE" })
+  @ManyToOne(() => Restaurant, { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

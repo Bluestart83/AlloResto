@@ -6,8 +6,8 @@ import {
   OneToMany,
   JoinColumn,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
-import type { MenuItem } from "./MenuItem";
+import { Restaurant } from "./Restaurant";
+import { MenuItem } from "./MenuItem";
 
 @Entity("menu_categories")
 export class MenuCategory {
@@ -17,7 +17,7 @@ export class MenuCategory {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "menuCategories", { onDelete: "CASCADE" })
+  @ManyToOne(() => Restaurant, r => r.menuCategories, { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -31,6 +31,6 @@ export class MenuCategory {
   isActive!: boolean;
 
   // --- Relations ---
-  @OneToMany("MenuItem", "category")
+  @OneToMany(() => MenuItem, mi => mi.category)
   items!: MenuItem[];
 }

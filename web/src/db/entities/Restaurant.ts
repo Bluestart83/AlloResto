@@ -7,21 +7,21 @@ import {
   OneToMany,
   OneToOne,
 } from "typeorm";
-import type { PhoneLine } from "./PhoneLine";
-import type { Customer } from "./Customer";
-import type { MenuCategory } from "./MenuCategory";
-import type { MenuItem } from "./MenuItem";
-import type { Call } from "./Call";
-import type { Order } from "./Order";
-import type { Faq } from "./Faq";
-import type { Reservation } from "./Reservation";
-import type { DiningRoom } from "./DiningRoom";
-import type { DiningTable } from "./DiningTable";
-import type { Message } from "./Message";
-import type { ExternalLoad } from "./ExternalLoad";
-import type { SyncPlatformConfig } from "./SyncPlatformConfig";
-import type { DiningService } from "./DiningService";
-import type { Offer } from "./Offer";
+import { PhoneLine } from "./PhoneLine";
+import { Customer } from "./Customer";
+import { MenuCategory } from "./MenuCategory";
+import { MenuItem } from "./MenuItem";
+import { Call } from "./Call";
+import { Order } from "./Order";
+import { Faq } from "./Faq";
+import { Reservation } from "./Reservation";
+import { DiningRoom } from "./DiningRoom";
+import { DiningTable } from "./DiningTable";
+import { Message } from "./Message";
+import { ExternalLoad } from "./ExternalLoad";
+import { SyncPlatformConfig } from "./SyncPlatformConfig";
+import { DiningService } from "./DiningService";
+import { Offer } from "./Offer";
 
 @Entity("restaurants")
 export class Restaurant {
@@ -245,49 +245,49 @@ export class Restaurant {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt!: Date;
 
-  // --- Relations (string refs to avoid circular deps with Turbopack) ---
-  @OneToOne("PhoneLine", "restaurant")
+  // --- Relations (lazy arrow refs to handle circular deps) ---
+  @OneToOne(() => PhoneLine, p => p.restaurant)
   phoneLine!: PhoneLine;
 
-  @OneToMany("Customer", "restaurant")
+  @OneToMany(() => Customer, c => c.restaurant)
   customers!: Customer[];
 
-  @OneToMany("MenuCategory", "restaurant")
+  @OneToMany(() => MenuCategory, mc => mc.restaurant)
   menuCategories!: MenuCategory[];
 
-  @OneToMany("MenuItem", "restaurant")
+  @OneToMany(() => MenuItem, mi => mi.restaurant)
   menuItems!: MenuItem[];
 
-  @OneToMany("Call", "restaurant")
+  @OneToMany(() => Call, c => c.restaurant)
   calls!: Call[];
 
-  @OneToMany("Order", "restaurant")
+  @OneToMany(() => Order, o => o.restaurant)
   orders!: Order[];
 
-  @OneToMany("Faq", "restaurant")
+  @OneToMany(() => Faq, f => f.restaurant)
   faqs!: Faq[];
 
-  @OneToMany("Reservation", "restaurant")
+  @OneToMany(() => Reservation, r => r.restaurant)
   reservations!: Reservation[];
 
-  @OneToMany("DiningRoom", "restaurant")
+  @OneToMany(() => DiningRoom, dr => dr.restaurant)
   diningRooms!: DiningRoom[];
 
-  @OneToMany("DiningTable", "restaurant")
+  @OneToMany(() => DiningTable, dt => dt.restaurant)
   diningTables!: DiningTable[];
 
-  @OneToMany("Message", "restaurant")
+  @OneToMany(() => Message, m => m.restaurant)
   messages!: Message[];
 
-  @OneToMany("ExternalLoad", "restaurant")
+  @OneToMany(() => ExternalLoad, el => el.restaurant)
   externalLoads!: ExternalLoad[];
 
-  @OneToMany("SyncPlatformConfig", "restaurant")
+  @OneToMany(() => SyncPlatformConfig, s => s.restaurant)
   syncPlatformConfigs!: SyncPlatformConfig[];
 
-  @OneToMany("DiningService", "restaurant")
+  @OneToMany(() => DiningService, ds => ds.restaurant)
   diningServices!: DiningService[];
 
-  @OneToMany("Offer", "restaurant")
+  @OneToMany(() => Offer, o => o.restaurant)
   offers!: Offer[];
 }

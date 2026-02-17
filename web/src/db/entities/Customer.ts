@@ -9,10 +9,10 @@ import {
   JoinColumn,
   Unique,
 } from "typeorm";
-import type { Restaurant } from "./Restaurant";
-import type { Call } from "./Call";
-import type { Order } from "./Order";
-import type { Reservation } from "./Reservation";
+import { Restaurant } from "./Restaurant";
+import { Call } from "./Call";
+import { Order } from "./Order";
+import { Reservation } from "./Reservation";
 
 @Entity("customers")
 @Unique(["restaurantId", "phone"])
@@ -23,7 +23,7 @@ export class Customer {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne("Restaurant", "customers", { onDelete: "CASCADE" })
+  @ManyToOne(() => Restaurant, r => r.customers, { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -153,12 +153,12 @@ export class Customer {
   updatedAt!: Date;
 
   // --- Relations ---
-  @OneToMany("Call", "customer")
+  @OneToMany(() => Call, c => c.customer)
   calls!: Call[];
 
-  @OneToMany("Order", "customer")
+  @OneToMany(() => Order, o => o.customer)
   orders!: Order[];
 
-  @OneToMany("Reservation", "customer")
+  @OneToMany(() => Reservation, r => r.customer)
   reservations!: Reservation[];
 }
