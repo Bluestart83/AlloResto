@@ -16,7 +16,7 @@ COPY web/ .
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
 ENV GOOGLE_MAPS_API_KEY=build-placeholder
 
-RUN npx next build
+RUN npx next build --webpack
 
 EXPOSE 3000
 CMD ["npm", "start"]
