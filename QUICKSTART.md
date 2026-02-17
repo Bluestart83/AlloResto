@@ -9,7 +9,10 @@
 
 ```bash
 cp .env.example .env
-# Remplir : OPENAI_API_KEY, GOOGLE_MAPS_API_KEY
+# Remplir : OPENAI_API_KEY, GOOGLE_MAPS_API_KEY, BETTER_AUTH_SECRET
+
+# ⚠️  OBLIGATOIRE — créer le symlink .env racine → web/
+ln -sf ../.env web/.env
 ```
 
 ## Install + lancement
@@ -44,9 +47,11 @@ npx tsx scripts/seed-alloresto.ts
 
 | Variable | Defaut | Description |
 |----------|--------|-------------|
-| `DATABASE_URL` | `./database.db` | Chemin SQLite ou URL PostgreSQL |
+| `DATABASE_URL` | `../data/database.db` | Chemin SQLite ou URL PostgreSQL |
 | `OPENAI_API_KEY` | | Cle OpenAI (scan menu) |
 | `GOOGLE_MAPS_API_KEY` | | Geocodage + distance |
 | `SIP_AGENT_SERVER_URL` | `http://localhost:4000` | API sip-agent-server |
 | `NEXT_PUBLIC_BILLING_URL` | `http://localhost:5173` | Web UI facturation |
 | `ENCRYPTION_KEY` | | AES-256 pour SIP passwords (`openssl rand -hex 32`) |
+| `BETTER_AUTH_SECRET` | | Secret Better Auth (`openssl rand -base64 32`) |
+| `BETTER_AUTH_URL` | `http://localhost:3000` | URL publique Better Auth |
