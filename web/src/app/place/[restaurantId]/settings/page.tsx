@@ -147,6 +147,7 @@ interface RestaurantData {
   transferAutomatic: boolean;
   transferCases: string | null;
   maxParallelCalls: number;
+  maxCallDurationSec: number;
 }
 
 interface PhoneLineData {
@@ -266,7 +267,7 @@ export default function SettingsPage() {
           sipPassword: sipBridge && sipPassword ? sipPassword : undefined,
           twilioTrunkSid: !sipBridge ? sipTwilioTrunkSid : null,
           isActive: sipIsActive,
-          maxCallDurationSec: data.maxCallDurationSec,
+          maxCallDurationSec: data!.maxCallDurationSec,
         }),
       });
       if (res.ok) {
