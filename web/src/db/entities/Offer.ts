@@ -18,14 +18,14 @@ export class Offer {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "offers", { onDelete: "CASCADE" })
+  @ManyToOne("restaurants", "offers", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "menu_item_id", type: "varchar", nullable: true })
   menuItemId!: string | null;
 
-  @ManyToOne(() => require("./MenuItem").MenuItem, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne("menu_items", { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "menu_item_id" })
   menuItem!: MenuItem | null;
 

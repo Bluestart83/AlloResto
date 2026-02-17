@@ -34,7 +34,7 @@ export class Order {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "orders")
+  @ManyToOne("restaurants", "orders")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -45,7 +45,7 @@ export class Order {
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne(() => require("./Customer").Customer, "orders", { nullable: true })
+  @ManyToOne("customers", "orders", { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 
@@ -128,7 +128,7 @@ export class Order {
   @Column({ name: "trip_id", type: "varchar", nullable: true })
   tripId!: string | null;
 
-  @ManyToOne(() => require("./DeliveryTrip").DeliveryTrip, { nullable: true })
+  @ManyToOne("delivery_trips", { nullable: true })
   @JoinColumn({ name: "trip_id" })
   trip!: DeliveryTrip | null;
 
@@ -139,6 +139,6 @@ export class Order {
   updatedAt!: Date;
 
   // --- Relations ---
-  @OneToMany(() => require("./OrderItem").OrderItem, "order", { cascade: true })
+  @OneToMany("order_items", "order", { cascade: true })
   items!: OrderItem[];
 }

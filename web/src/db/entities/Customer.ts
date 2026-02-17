@@ -23,7 +23,7 @@ export class Customer {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "customers", { onDelete: "CASCADE" })
+  @ManyToOne("restaurants", "customers", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -153,12 +153,12 @@ export class Customer {
   updatedAt!: Date;
 
   // --- Relations ---
-  @OneToMany(() => require("./Call").Call, "customer")
+  @OneToMany("calls", "customer")
   calls!: Call[];
 
-  @OneToMany(() => require("./Order").Order, "customer")
+  @OneToMany("orders", "customer")
   orders!: Order[];
 
-  @OneToMany(() => require("./Reservation").Reservation, "customer")
+  @OneToMany("reservations", "customer")
   reservations!: Reservation[];
 }

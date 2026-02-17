@@ -18,14 +18,14 @@ export class DiningTable {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "diningTables")
+  @ManyToOne("restaurants", "diningTables")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "dining_room_id", type: "varchar" })
   diningRoomId!: string;
 
-  @ManyToOne(() => require("./DiningRoom").DiningRoom, "tables")
+  @ManyToOne("dining_rooms", "tables")
   @JoinColumn({ name: "dining_room_id" })
   diningRoom!: DiningRoom;
 

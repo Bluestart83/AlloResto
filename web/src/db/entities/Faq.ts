@@ -36,7 +36,7 @@ export class Faq {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "faqs", { onDelete: "CASCADE" })
+  @ManyToOne("restaurants", "faqs", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

@@ -31,21 +31,21 @@ export class Reservation {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "reservations")
+  @ManyToOne("restaurants", "reservations")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "call_id", type: "varchar", nullable: true })
   callId!: string | null;
 
-  @ManyToOne(() => require("./Call").Call, { nullable: true })
+  @ManyToOne("calls", { nullable: true })
   @JoinColumn({ name: "call_id" })
   call!: Call | null;
 
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne(() => require("./Customer").Customer, "reservations", { nullable: true })
+  @ManyToOne("customers", "reservations", { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 
@@ -90,14 +90,14 @@ export class Reservation {
   @Column({ name: "service_id", type: "varchar", nullable: true })
   serviceId!: string | null;
 
-  @ManyToOne(() => require("./DiningService").DiningService, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne("dining_services", { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "service_id" })
   diningService!: DiningService | null;
 
   @Column({ name: "dining_room_id", type: "varchar", nullable: true })
   diningRoomId!: string | null;
 
-  @ManyToOne(() => require("./DiningRoom").DiningRoom, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne("dining_rooms", { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "dining_room_id" })
   diningRoom!: DiningRoom | null;
 
@@ -118,7 +118,7 @@ export class Reservation {
   @Column({ name: "offer_id", type: "varchar", nullable: true })
   offerId!: string | null;
 
-  @ManyToOne(() => require("./Offer").Offer, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne("offers", { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "offer_id" })
   offer!: Offer | null;
 

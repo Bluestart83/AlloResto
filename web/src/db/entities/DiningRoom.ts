@@ -19,7 +19,7 @@ export class DiningRoom {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "diningRooms")
+  @ManyToOne("restaurants", "diningRooms")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -45,6 +45,6 @@ export class DiningRoom {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt!: Date;
 
-  @OneToMany(() => require("./DiningTable").DiningTable, "diningRoom")
+  @OneToMany("dining_tables", "diningRoom")
   tables!: DiningTable[];
 }

@@ -16,7 +16,7 @@ export class BlockedPhone {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, { onDelete: "CASCADE" })
+  @ManyToOne("restaurants", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

@@ -24,14 +24,14 @@ export class Message {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "messages")
+  @ManyToOne("restaurants", "messages")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "call_id", type: "varchar", nullable: true })
   callId!: string | null;
 
-  @ManyToOne(() => require("./Call").Call, { nullable: true })
+  @ManyToOne("calls", { nullable: true })
   @JoinColumn({ name: "call_id" })
   call!: Call | null;
 

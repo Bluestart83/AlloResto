@@ -17,7 +17,7 @@ export class ExternalLoad {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "externalLoads")
+  @ManyToOne("restaurants", "externalLoads")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

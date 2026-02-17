@@ -246,52 +246,52 @@ export class Restaurant {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt!: Date;
 
-  // --- Relations (lazy require to avoid circular deps + minification) ---
-  @OneToOne(() => require("./PhoneLine").PhoneLine, "restaurant")
+  // --- Relations (use table names to survive Turbopack minification) ---
+  @OneToOne("phone_lines", "restaurant")
   phoneLine!: PhoneLine;
 
-  @OneToMany(() => require("./Customer").Customer, "restaurant")
+  @OneToMany("customers", "restaurant")
   customers!: Customer[];
 
-  @OneToMany(() => require("./MenuCategory").MenuCategory, "restaurant")
+  @OneToMany("menu_categories", "restaurant")
   menuCategories!: MenuCategory[];
 
-  @OneToMany(() => require("./MenuItem").MenuItem, "restaurant")
+  @OneToMany("menu_items", "restaurant")
   menuItems!: MenuItem[];
 
-  @OneToMany(() => require("./Call").Call, "restaurant")
+  @OneToMany("calls", "restaurant")
   calls!: Call[];
 
-  @OneToMany(() => require("./Order").Order, "restaurant")
+  @OneToMany("orders", "restaurant")
   orders!: Order[];
 
-  @OneToMany(() => require("./Faq").Faq, "restaurant")
+  @OneToMany("faqs", "restaurant")
   faqs!: Faq[];
 
-  @OneToMany(() => require("./Reservation").Reservation, "restaurant")
+  @OneToMany("reservations", "restaurant")
   reservations!: Reservation[];
 
-  @OneToMany(() => require("./DiningRoom").DiningRoom, "restaurant")
+  @OneToMany("dining_rooms", "restaurant")
   diningRooms!: DiningRoom[];
 
-  @OneToMany(() => require("./DiningTable").DiningTable, "restaurant")
+  @OneToMany("dining_tables", "restaurant")
   diningTables!: DiningTable[];
 
-  @OneToMany(() => require("./Message").Message, "restaurant")
+  @OneToMany("messages", "restaurant")
   messages!: Message[];
 
-  @OneToMany(() => require("./ExternalLoad").ExternalLoad, "restaurant")
+  @OneToMany("external_loads", "restaurant")
   externalLoads!: ExternalLoad[];
 
-  @OneToMany(() => require("./SyncPlatformConfig").SyncPlatformConfig, "restaurant")
+  @OneToMany("sync_platform_configs", "restaurant")
   syncPlatformConfigs!: SyncPlatformConfig[];
 
-  @OneToMany(() => require("./DiningService").DiningService, "restaurant")
+  @OneToMany("dining_services", "restaurant")
   diningServices!: DiningService[];
 
-  @OneToMany(() => require("./Offer").Offer, "restaurant")
+  @OneToMany("offers", "restaurant")
   offers!: Offer[];
 
-  @OneToMany(() => require("./DeliveryTrip").DeliveryTrip, "restaurant")
+  @OneToMany("delivery_trips", "restaurant")
   deliveryTrips!: DeliveryTrip[];
 }

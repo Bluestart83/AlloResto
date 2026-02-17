@@ -17,7 +17,7 @@ export class MenuCategory {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "menuCategories", { onDelete: "CASCADE" })
+  @ManyToOne("restaurants", "menuCategories", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
@@ -31,6 +31,6 @@ export class MenuCategory {
   isActive!: boolean;
 
   // --- Relations ---
-  @OneToMany(() => require("./MenuItem").MenuItem, "category")
+  @OneToMany("menu_items", "category")
   items!: MenuItem[];
 }

@@ -27,21 +27,21 @@ export class Call {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "calls")
+  @ManyToOne("restaurants", "calls")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "phone_line_id", type: "varchar", nullable: true })
   phoneLineId!: string | null;
 
-  @ManyToOne(() => require("./PhoneLine").PhoneLine, { nullable: true })
+  @ManyToOne("phone_lines", { nullable: true })
   @JoinColumn({ name: "phone_line_id" })
   phoneLine!: PhoneLine | null;
 
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne(() => require("./Customer").Customer, "calls", { nullable: true })
+  @ManyToOne("customers", "calls", { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 

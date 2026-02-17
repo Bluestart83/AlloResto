@@ -16,7 +16,7 @@ export class PhoneLine {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @OneToOne(() => require("./Restaurant").Restaurant, "phoneLine", { onDelete: "CASCADE" })
+  @OneToOne("restaurants", "phoneLine", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

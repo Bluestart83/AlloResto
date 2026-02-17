@@ -16,14 +16,14 @@ export class OrderItem {
   @Column({ name: "order_id", type: "varchar" })
   orderId!: string;
 
-  @ManyToOne(() => require("./Order").Order, "items", { onDelete: "CASCADE" })
+  @ManyToOne("orders", "items", { onDelete: "CASCADE" })
   @JoinColumn({ name: "order_id" })
   order!: Order;
 
   @Column({ name: "menu_item_id", type: "varchar", nullable: true })
   menuItemId!: string | null;
 
-  @ManyToOne(() => require("./MenuItem").MenuItem, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne("menu_items", { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "menu_item_id" })
   menuItem!: MenuItem | null;
 

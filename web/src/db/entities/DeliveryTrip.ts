@@ -36,7 +36,7 @@ export class DeliveryTrip {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "deliveryTrips")
+  @ManyToOne("restaurants", "deliveryTrips")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

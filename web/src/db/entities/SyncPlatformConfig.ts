@@ -20,7 +20,7 @@ export class SyncPlatformConfig {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => require("./Restaurant").Restaurant, "syncPlatformConfigs", { onDelete: "CASCADE" })
+  @ManyToOne("restaurants", "syncPlatformConfigs", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
