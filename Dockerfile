@@ -6,13 +6,15 @@ WORKDIR /app
 # billing-ui (copied into AlloResto/packages/ by prod.sh before build)
 COPY packages/billing-ui ./packages/billing-ui
 
-# Install deps
+# Install deps (strip workspace dep, re-add as file:)
 COPY web/package.json web/package-lock.json* ./
 RUN sed -i 's|"@nld/billing-ui": "[^"]*"|"@nld/billing-ui": "file:./packages/billing-ui"|' package.json
 RUN npm install --install-links
 
+# Copy source (overwrites package.json) then re-patch + re-install billing-ui
 COPY web/ .
 RUN sed -i 's|"@nld/billing-ui": "[^"]*"|"@nld/billing-ui": "file:./packages/billing-ui"|' package.json
+RUN npm install --install-links
 
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
 ENV GOOGLE_MAPS_API_KEY=build-placeholder
