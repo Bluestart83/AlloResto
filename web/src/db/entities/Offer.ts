@@ -7,8 +7,8 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { MenuItem } from "./MenuItem";
+import type { Restaurant } from "./Restaurant";
+import type { MenuItem } from "./MenuItem";
 
 @Entity("offers")
 export class Offer {
@@ -18,14 +18,14 @@ export class Offer {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, r => r.offers, { onDelete: "CASCADE" })
+  @ManyToOne(() => require("./Restaurant").Restaurant, "offers", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "menu_item_id", type: "varchar", nullable: true })
   menuItemId!: string | null;
 
-  @ManyToOne(() => MenuItem, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => require("./MenuItem").MenuItem, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "menu_item_id" })
   menuItem!: MenuItem | null;
 

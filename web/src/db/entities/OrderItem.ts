@@ -5,8 +5,8 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Order } from "./Order";
-import { MenuItem } from "./MenuItem";
+import type { Order } from "./Order";
+import type { MenuItem } from "./MenuItem";
 
 @Entity("order_items")
 export class OrderItem {
@@ -16,14 +16,14 @@ export class OrderItem {
   @Column({ name: "order_id", type: "varchar" })
   orderId!: string;
 
-  @ManyToOne(() => Order, o => o.items, { onDelete: "CASCADE" })
+  @ManyToOne(() => require("./Order").Order, "items", { onDelete: "CASCADE" })
   @JoinColumn({ name: "order_id" })
   order!: Order;
 
   @Column({ name: "menu_item_id", type: "varchar", nullable: true })
   menuItemId!: string | null;
 
-  @ManyToOne(() => MenuItem, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => require("./MenuItem").MenuItem, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "menu_item_id" })
   menuItem!: MenuItem | null;
 

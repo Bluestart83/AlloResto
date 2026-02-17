@@ -7,22 +7,22 @@ import {
   OneToMany,
   OneToOne,
 } from "typeorm";
-import { PhoneLine } from "./PhoneLine";
-import { Customer } from "./Customer";
-import { MenuCategory } from "./MenuCategory";
-import { MenuItem } from "./MenuItem";
-import { Call } from "./Call";
-import { Order } from "./Order";
-import { Faq } from "./Faq";
-import { Reservation } from "./Reservation";
-import { DiningRoom } from "./DiningRoom";
-import { DiningTable } from "./DiningTable";
-import { Message } from "./Message";
-import { ExternalLoad } from "./ExternalLoad";
-import { SyncPlatformConfig } from "./SyncPlatformConfig";
-import { DiningService } from "./DiningService";
-import { Offer } from "./Offer";
-import { DeliveryTrip } from "./DeliveryTrip";
+import type { PhoneLine } from "./PhoneLine";
+import type { Customer } from "./Customer";
+import type { MenuCategory } from "./MenuCategory";
+import type { MenuItem } from "./MenuItem";
+import type { Call } from "./Call";
+import type { Order } from "./Order";
+import type { Faq } from "./Faq";
+import type { Reservation } from "./Reservation";
+import type { DiningRoom } from "./DiningRoom";
+import type { DiningTable } from "./DiningTable";
+import type { Message } from "./Message";
+import type { ExternalLoad } from "./ExternalLoad";
+import type { SyncPlatformConfig } from "./SyncPlatformConfig";
+import type { DiningService } from "./DiningService";
+import type { Offer } from "./Offer";
+import type { DeliveryTrip } from "./DeliveryTrip";
 
 @Entity("restaurants")
 export class Restaurant {
@@ -246,52 +246,52 @@ export class Restaurant {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt!: Date;
 
-  // --- Relations (lazy arrow refs to handle circular deps) ---
-  @OneToOne(() => PhoneLine, p => p.restaurant)
+  // --- Relations (lazy require to avoid circular deps + minification) ---
+  @OneToOne(() => require("./PhoneLine").PhoneLine, "restaurant")
   phoneLine!: PhoneLine;
 
-  @OneToMany(() => Customer, c => c.restaurant)
+  @OneToMany(() => require("./Customer").Customer, "restaurant")
   customers!: Customer[];
 
-  @OneToMany(() => MenuCategory, mc => mc.restaurant)
+  @OneToMany(() => require("./MenuCategory").MenuCategory, "restaurant")
   menuCategories!: MenuCategory[];
 
-  @OneToMany(() => MenuItem, mi => mi.restaurant)
+  @OneToMany(() => require("./MenuItem").MenuItem, "restaurant")
   menuItems!: MenuItem[];
 
-  @OneToMany(() => Call, c => c.restaurant)
+  @OneToMany(() => require("./Call").Call, "restaurant")
   calls!: Call[];
 
-  @OneToMany(() => Order, o => o.restaurant)
+  @OneToMany(() => require("./Order").Order, "restaurant")
   orders!: Order[];
 
-  @OneToMany(() => Faq, f => f.restaurant)
+  @OneToMany(() => require("./Faq").Faq, "restaurant")
   faqs!: Faq[];
 
-  @OneToMany(() => Reservation, r => r.restaurant)
+  @OneToMany(() => require("./Reservation").Reservation, "restaurant")
   reservations!: Reservation[];
 
-  @OneToMany(() => DiningRoom, dr => dr.restaurant)
+  @OneToMany(() => require("./DiningRoom").DiningRoom, "restaurant")
   diningRooms!: DiningRoom[];
 
-  @OneToMany(() => DiningTable, dt => dt.restaurant)
+  @OneToMany(() => require("./DiningTable").DiningTable, "restaurant")
   diningTables!: DiningTable[];
 
-  @OneToMany(() => Message, m => m.restaurant)
+  @OneToMany(() => require("./Message").Message, "restaurant")
   messages!: Message[];
 
-  @OneToMany(() => ExternalLoad, el => el.restaurant)
+  @OneToMany(() => require("./ExternalLoad").ExternalLoad, "restaurant")
   externalLoads!: ExternalLoad[];
 
-  @OneToMany(() => SyncPlatformConfig, s => s.restaurant)
+  @OneToMany(() => require("./SyncPlatformConfig").SyncPlatformConfig, "restaurant")
   syncPlatformConfigs!: SyncPlatformConfig[];
 
-  @OneToMany(() => DiningService, ds => ds.restaurant)
+  @OneToMany(() => require("./DiningService").DiningService, "restaurant")
   diningServices!: DiningService[];
 
-  @OneToMany(() => Offer, o => o.restaurant)
+  @OneToMany(() => require("./Offer").Offer, "restaurant")
   offers!: Offer[];
 
-  @OneToMany(() => DeliveryTrip, dt => dt.restaurant)
+  @OneToMany(() => require("./DeliveryTrip").DeliveryTrip, "restaurant")
   deliveryTrips!: DeliveryTrip[];
 }

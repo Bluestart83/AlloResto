@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
+import type { Restaurant } from "./Restaurant";
 
 @Entity("external_loads")
 export class ExternalLoad {
@@ -17,7 +17,7 @@ export class ExternalLoad {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, r => r.externalLoads)
+  @ManyToOne(() => require("./Restaurant").Restaurant, "externalLoads")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

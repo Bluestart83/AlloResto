@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
+import type { Restaurant } from "./Restaurant";
 
 @Entity("dining_services")
 export class DiningService {
@@ -17,7 +17,7 @@ export class DiningService {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, r => r.diningServices, { onDelete: "CASCADE" })
+  @ManyToOne(() => require("./Restaurant").Restaurant, "diningServices", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

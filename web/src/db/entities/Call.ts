@@ -6,9 +6,9 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { PhoneLine } from "./PhoneLine";
-import { Customer } from "./Customer";
+import type { Restaurant } from "./Restaurant";
+import type { PhoneLine } from "./PhoneLine";
+import type { Customer } from "./Customer";
 
 export type CallOutcome =
   | "in_progress"
@@ -27,21 +27,21 @@ export class Call {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, r => r.calls)
+  @ManyToOne(() => require("./Restaurant").Restaurant, "calls")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "phone_line_id", type: "varchar", nullable: true })
   phoneLineId!: string | null;
 
-  @ManyToOne(() => PhoneLine, { nullable: true })
+  @ManyToOne(() => require("./PhoneLine").PhoneLine, { nullable: true })
   @JoinColumn({ name: "phone_line_id" })
   phoneLine!: PhoneLine | null;
 
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;
 
-  @ManyToOne(() => Customer, c => c.calls, { nullable: true })
+  @ManyToOne(() => require("./Customer").Customer, "calls", { nullable: true })
   @JoinColumn({ name: "customer_id" })
   customer!: Customer | null;
 

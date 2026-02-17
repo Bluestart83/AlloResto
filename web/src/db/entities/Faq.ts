@@ -8,7 +8,7 @@ import {
   JoinColumn,
   Index,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
+import type { Restaurant } from "./Restaurant";
 
 /**
  * FAQ — Base de connaissances par restaurant
@@ -36,7 +36,7 @@ export class Faq {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, r => r.faqs, { onDelete: "CASCADE" })
+  @ManyToOne(() => require("./Restaurant").Restaurant, "faqs", { onDelete: "CASCADE" })
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 

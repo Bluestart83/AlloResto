@@ -7,8 +7,8 @@ import {
   ManyToOne,
   JoinColumn,
 } from "typeorm";
-import { Restaurant } from "./Restaurant";
-import { DiningRoom } from "./DiningRoom";
+import type { Restaurant } from "./Restaurant";
+import type { DiningRoom } from "./DiningRoom";
 
 @Entity("dining_tables")
 export class DiningTable {
@@ -18,14 +18,14 @@ export class DiningTable {
   @Column({ name: "restaurant_id", type: "varchar" })
   restaurantId!: string;
 
-  @ManyToOne(() => Restaurant, r => r.diningTables)
+  @ManyToOne(() => require("./Restaurant").Restaurant, "diningTables")
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
   @Column({ name: "dining_room_id", type: "varchar" })
   diningRoomId!: string;
 
-  @ManyToOne(() => DiningRoom, dr => dr.tables)
+  @ManyToOne(() => require("./DiningRoom").DiningRoom, "tables")
   @JoinColumn({ name: "dining_room_id" })
   diningRoom!: DiningRoom;
 
