@@ -22,6 +22,7 @@ import { ExternalLoad } from "./ExternalLoad";
 import { SyncPlatformConfig } from "./SyncPlatformConfig";
 import { DiningService } from "./DiningService";
 import { Offer } from "./Offer";
+import { DeliveryTrip } from "./DeliveryTrip";
 
 @Entity("restaurants")
 export class Restaurant {
@@ -290,4 +291,7 @@ export class Restaurant {
 
   @OneToMany(() => Offer, o => o.restaurant)
   offers!: Offer[];
+
+  @OneToMany(() => DeliveryTrip, dt => dt.restaurant)
+  deliveryTrips!: DeliveryTrip[];
 }
