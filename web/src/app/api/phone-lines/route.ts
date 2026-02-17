@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
           phoneNumber: phoneLine.phoneNumber,
           provider: phoneLine.provider,
           sipTransport: phoneLine.sipTransport,
+          stunServer: phoneLine.stunServer,
           sipDomain: phoneLine.sipDomain,
           sipUsername: phoneLine.sipUsername,
           hasSipPassword: !!phoneLine.sipPassword,
@@ -53,6 +54,7 @@ export async function PUT(req: NextRequest) {
     phoneNumber,
     provider,
     sipTransport,
+    stunServer,
     sipDomain,
     sipUsername,
     sipPassword,
@@ -96,6 +98,7 @@ export async function PUT(req: NextRequest) {
   phoneLine.phoneNumber = phoneNumber;
   if (provider !== undefined) phoneLine.provider = provider;
   if (sipTransport !== undefined) phoneLine.sipTransport = sipTransport || null;
+  if (stunServer !== undefined) phoneLine.stunServer = stunServer || null;
   if (sipDomain !== undefined) phoneLine.sipDomain = sipDomain || null;
   if (sipUsername !== undefined) phoneLine.sipUsername = sipUsername || null;
   if (twilioTrunkSid !== undefined) phoneLine.twilioTrunkSid = twilioTrunkSid || null;
@@ -115,6 +118,7 @@ export async function PUT(req: NextRequest) {
   if (restaurant?.agentId) {
     const agentUpdates: Record<string, string | boolean> = {};
     if (sipTransport !== undefined) agentUpdates.sipTransport = sipTransport || "";
+    if (stunServer !== undefined) agentUpdates.stunServer = stunServer || "";
     if (sipDomain !== undefined) agentUpdates.sipDomain = sipDomain || "";
     if (sipUsername !== undefined) agentUpdates.sipUsername = sipUsername || "";
     if (sipPassword) agentUpdates.sipPassword = sipPassword;

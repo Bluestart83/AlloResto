@@ -121,6 +121,7 @@ export async function provisionAgent(restaurant: {
   maxCallDurationSec?: number;
   sip?: {
     transport?: string;
+    stunServer?: string;
     domain: string;
     username: string;
     password: string;
@@ -160,6 +161,7 @@ export async function provisionAgent(restaurant: {
           transferEnabled: !!(restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic),
         },
         sipTransport: restaurant.sip?.transport || null,
+        stunServer: restaurant.sip?.stunServer || null,
         sipDomain: restaurant.sip?.domain || null,
         sipUsername: restaurant.sip?.username || null,
         sipPassword: restaurant.sip?.password || null,
@@ -310,10 +312,13 @@ export async function updateAgent(
     name?: string;
     aiVoice?: string;
     timezone?: string;
+    sipTransport?: string;
+    stunServer?: string;
     sipDomain?: string;
     sipUsername?: string;
     sipPassword?: string;
     isActive?: boolean;
+    maxCallDurationSec?: number;
     apiBaseUrl?: string;
     externalSessionUrl?: string;
     onCallEndWebhook?: string;

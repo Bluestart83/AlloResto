@@ -31,6 +31,9 @@ export class PhoneLine {
   @Column({ name: "sip_transport", type: "varchar", length: 10, nullable: true })
   sipTransport!: string | null;  // "udp" | "tcp" | "tls" — null = default (udp)
 
+  @Column({ name: "stun_server", type: "varchar", length: 255, nullable: true })
+  stunServer!: string | null;  // "stun.zadarma.com" — null = ENV fallback
+
   @Column({ name: "sip_domain", type: "varchar", length: 255, nullable: true })
   sipDomain!: string | null;
 

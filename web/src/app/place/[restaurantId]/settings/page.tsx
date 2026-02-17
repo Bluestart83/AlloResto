@@ -178,6 +178,7 @@ export default function SettingsPage() {
   const [sipPhoneNumber, setSipPhoneNumber] = useState("");
   const [sipProvider, setSipProvider] = useState("twilio");
   const [sipTransport, setSipTransport] = useState("");
+  const [stunServer, setStunServer] = useState("");
   const [sipDomain, setSipDomain] = useState("");
   const [sipUsername, setSipUsername] = useState("");
   const [sipPassword, setSipPassword] = useState("");
@@ -207,6 +208,7 @@ export default function SettingsPage() {
           setSipPhoneNumber(phoneData.phoneLine.phoneNumber || "");
           setSipProvider(phoneData.phoneLine.provider || "twilio");
           setSipTransport(phoneData.phoneLine.sipTransport || "");
+          setStunServer(phoneData.phoneLine.stunServer || "");
           setSipDomain(phoneData.phoneLine.sipDomain || "");
           setSipUsername(phoneData.phoneLine.sipUsername || "");
           setSipTwilioTrunkSid(phoneData.phoneLine.twilioTrunkSid || "");
@@ -258,6 +260,7 @@ export default function SettingsPage() {
           phoneNumber: sipPhoneNumber,
           provider: sipBridge ? "sip" : "twilio",
           sipTransport: sipBridge ? sipTransport || null : null,
+          stunServer: sipBridge ? stunServer || null : null,
           sipDomain: sipBridge ? sipDomain : null,
           sipUsername: sipBridge ? sipUsername : null,
           sipPassword: sipBridge && sipPassword ? sipPassword : undefined,
@@ -864,6 +867,10 @@ export default function SettingsPage() {
                         <option value="tcp">TCP</option>
                         <option value="tls">TLS</option>
                       </select>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">STUN Server</label>
+                      <input className="form-control" value={stunServer} onChange={(e) => setStunServer(e.target.value)} placeholder="Par defaut (ENV)" />
                     </div>
                     <div className="col-md-6">
                       <label className="form-label">Domaine SIP</label>
