@@ -8,10 +8,11 @@ COPY AlloResto/web/package.json AlloResto/web/package-lock.json* ./
 RUN sed -i '/"@nld\/billing-ui"/d' package.json
 RUN npm install
 
-# billing-ui (shared package — after npm install so it won't be overwritten)
+COPY AlloResto/web .
+
+# billing-ui (shared package — AFTER copy web to avoid being overwritten)
 COPY packages/billing-ui /app/node_modules/@nld/billing-ui
 
-COPY AlloResto/web .
 RUN npm run build
 
 EXPOSE 3000
