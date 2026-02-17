@@ -13,7 +13,7 @@ RUN npm install
 # Copy source
 COPY web/ .
 
-# Place billing-ui in node_modules (resolved via turbopack.resolveAlias in next.config.js)
+# Also place in node_modules as fallback (primary resolution via webpack alias in next.config.js)
 RUN mkdir -p node_modules/@nld && cp -r packages/billing-ui node_modules/@nld/billing-ui
 
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
