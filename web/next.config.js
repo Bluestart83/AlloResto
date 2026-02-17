@@ -2,6 +2,7 @@
 const nextConfig = {
   transpilePackages: ["@nld/billing-ui"],
   serverExternalPackages: ["typeorm", "better-sqlite3"],
+  serverMinification: false, // TypeORM string refs need class names preserved
   turbopack: {
     resolveAlias: {
       "@nld/billing-ui": "./packages/billing-ui/src/index.ts",
