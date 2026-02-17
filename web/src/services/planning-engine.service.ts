@@ -3,9 +3,9 @@
 // ============================================================
 
 import { getDb } from "@/lib/db";
-import { Order } from "@/db/entities/Order";
-import { ExternalLoad } from "@/db/entities/ExternalLoad";
-import { Restaurant } from "@/db/entities/Restaurant";
+import type { Order } from "@/db/entities/Order";
+import type { ExternalLoad } from "@/db/entities/ExternalLoad";
+import type { Restaurant } from "@/db/entities/Restaurant";
 import { In, Not, LessThanOrEqual, MoreThanOrEqual } from "typeorm";
 import {
   type Resource,
@@ -128,7 +128,7 @@ interface InternalSlot {
 
 async function loadActiveOrders(restaurantId: string): Promise<Order[]> {
   const ds = await getDb();
-  return ds.getRepository(Order).find({
+  return ds.getRepository<Order>("orders").find({
     where: {
       restaurantId,
       status: Not(In(["completed", "cancelled"])),
@@ -139,7 +139,7 @@ async function loadActiveOrders(restaurantId: string): Promise<Order[]> {
 
 async function loadActiveExternalLoads(restaurantId: string, from: Date, to: Date): Promise<ExternalLoad[]> {
   const ds = await getDb();
-  return ds.getRepository(ExternalLoad).find({
+  return ds.getRepository<ExternalLoad>("external_loads").find({
     where: {
       restaurantId,
       startTime: LessThanOrEqual(to),
@@ -255,7 +255,7 @@ function fillExternalLoadOnTimeline(
 
 export async function getTimelineSnapshot(restaurantId: string): Promise<TimelineSnapshot> {
   const ds = await getDb();
-  const restaurant = await ds.getRepository(Restaurant).findOneByOrFail({ id: restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneByOrFail({ id: restaurantId });
   const config = getConfig(restaurant);
 
   const now = new Date();
@@ -346,7 +346,7 @@ export async function scheduleOrder(
   estimatedReadyAt: Date;
 } | null> {
   const ds = await getDb();
-  const restaurant = await ds.getRepository(Restaurant).findOneByOrFail({ id: restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneByOrFail({ id: restaurantId });
   const config = getConfig(restaurant);
 
   const now = new Date();
@@ -443,7 +443,7 @@ export async function getAvailableSlots(
   transitMin: number = 0,
 ): Promise<AvailableSlot[]> {
   const ds = await getDb();
-  const restaurant = await ds.getRepository(Restaurant).findOneByOrFail({ id: restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneByOrFail({ id: restaurantId });
   const config = getConfig(restaurant);
 
   const now = new Date();

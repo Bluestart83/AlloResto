@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
+import type { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
 import { clearConnectorCache } from "@/services/sync/connectors/connector.registry";
 
 // ---------------------------------------------------------------------------
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   const db = await getDb();
-  const configs = await db.getRepository(SyncPlatformConfig).find({
+  const configs = await db.getRepository<SyncPlatformConfig>("sync_platform_configs").find({
     where: { restaurantId },
     order: { platform: "ASC" },
   });
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(SyncPlatformConfig);
+  const repo = db.getRepository<SyncPlatformConfig>("sync_platform_configs");
 
   // Contrainte unique
   const existing = await repo.findOneBy({ restaurantId, platform });
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(SyncPlatformConfig);
+  const repo = db.getRepository<SyncPlatformConfig>("sync_platform_configs");
   const config = await repo.findOneBy({ id });
   if (!config) {
     return NextResponse.json({ error: "Config not found" }, { status: 404 });
@@ -172,7 +172,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(SyncPlatformConfig);
+  const repo = db.getRepository<SyncPlatformConfig>("sync_platform_configs");
   const config = await repo.findOneBy({ id });
   if (!config) {
     return NextResponse.json({ error: "Config not found" }, { status: 404 });

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { PhoneLine } from "@/db/entities/PhoneLine";
-import { Restaurant } from "@/db/entities/Restaurant";
+import type { PhoneLine } from "@/db/entities/PhoneLine";
+import type { Restaurant } from "@/db/entities/Restaurant";
 import { encryptSipPassword, isEncrypted } from "@/services/sip-encryption.service";
-import { updateAgent } from "@/services/sip-agent-provisioning.service";
+import { updateAgent, upsertPhoneLine } from "@/services/sip-agent-provisioning.service";
 
 /**
  * GET /api/phone-lines?restaurantId=xxx
@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
   }
 
   const ds = await getDb();
-  const phoneLine = await ds.getRepository(PhoneLine).findOneBy({ restaurantId });
-  const restaurant = await ds.getRepository(Restaurant).findOneBy({ id: restaurantId });
+  const phoneLine = await ds.getRepository<PhoneLine>("phone_lines").findOneBy({ restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
 
   if (!restaurant) {
     return NextResponse.json({ error: "Restaurant non trouvé" }, { status: 404 });
@@ -80,11 +80,11 @@ export async function PUT(req: NextRequest) {
   if (sipBridge !== undefined) restaurantUpdate.sipBridge = !!sipBridge;
   if (maxCallDurationSec !== undefined) restaurantUpdate.maxCallDurationSec = maxCallDurationSec;
   if (Object.keys(restaurantUpdate).length > 0) {
-    await ds.getRepository(Restaurant).update(restaurantId, restaurantUpdate);
+    await ds.getRepository<Restaurant>("restaurants").update(restaurantId, restaurantUpdate);
   }
 
   // Upsert phone line
-  const repo = ds.getRepository(PhoneLine);
+  const repo = ds.getRepository<PhoneLine>("phone_lines");
   let phoneLine = await repo.findOneBy({ restaurantId });
 
   if (!phoneLine) {
@@ -114,16 +114,22 @@ export async function PUT(req: NextRequest) {
   await repo.save(phoneLine);
 
   // Sync vers sip-agent-server
-  const restaurant = await ds.getRepository(Restaurant).findOneBy({ id: restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
   if (restaurant?.agentId) {
-    const agentUpdates: Record<string, string | boolean> = {};
-    if (sipTransport !== undefined) agentUpdates.sipTransport = sipTransport || "";
-    if (stunServer !== undefined) agentUpdates.stunServer = stunServer || "";
-    if (sipDomain !== undefined) agentUpdates.sipDomain = sipDomain || "";
-    if (sipUsername !== undefined) agentUpdates.sipUsername = sipUsername || "";
-    if (sipPassword) agentUpdates.sipPassword = sipPassword;
-    if (maxCallDurationSec !== undefined) (agentUpdates as any).maxCallDurationSec = maxCallDurationSec;
-    // Sync activation state: sipEnabled toggles agent isActive
+    // Sync PhoneLine (SIP creds + transport) vers sip-agent-server → declenche re-register
+    const plUpdates: Record<string, any> = { provider: phoneLine.provider };
+    if (sipTransport !== undefined) plUpdates.sipTransport = sipTransport || null;
+    if (stunServer !== undefined) plUpdates.stunServer = stunServer || null;
+    if (sipDomain !== undefined) plUpdates.sipDomain = sipDomain || null;
+    if (sipUsername !== undefined) plUpdates.sipUsername = sipUsername || null;
+    if (sipPassword) plUpdates.sipPassword = sipPassword;
+    if (twilioTrunkSid !== undefined) plUpdates.twilioTrunkSid = twilioTrunkSid || null;
+    if (isActive !== undefined) plUpdates.isActive = isActive;
+    await upsertPhoneLine(restaurant.agentId, phoneNumber, plUpdates);
+
+    // Sync Agent-level config (activation, call duration)
+    const agentUpdates: Record<string, any> = {};
+    if (maxCallDurationSec !== undefined) agentUpdates.maxCallDurationSec = maxCallDurationSec;
     if (sipEnabled !== undefined) agentUpdates.isActive = !!sipEnabled;
     if (Object.keys(agentUpdates).length > 0) {
       await updateAgent(restaurant.agentId, agentUpdates);

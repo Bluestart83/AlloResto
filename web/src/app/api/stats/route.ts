@@ -7,10 +7,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Call } from "@/db/entities/Call";
-import { Order } from "@/db/entities/Order";
-import { Customer } from "@/db/entities/Customer";
-import { Restaurant } from "@/db/entities/Restaurant";
+import type { Call } from "@/db/entities/Call";
+import type { Order } from "@/db/entities/Order";
+import type { Customer } from "@/db/entities/Customer";
+import type { Restaurant } from "@/db/entities/Restaurant";
 import { MoreThanOrEqual } from "typeorm";
 import { getExchangeRate } from "@/services/exchange-rate.service";
 
@@ -40,13 +40,13 @@ export async function GET(req: NextRequest) {
 
   // ---- Restaurant currency + display exchange rate ----
   // Costs are stored in BILLING_CURRENCY (EUR). If restaurant locale differs, provide fx for display.
-  const restaurant = await ds.getRepository(Restaurant).findOneByOrFail({ id: restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneByOrFail({ id: restaurantId });
   const billingCurrency = process.env.NEXT_PUBLIC_BILLING_CURRENCY!;
   const displayCurrency = restaurant.currency;
   const displayFx = displayCurrency === billingCurrency ? 1 : await getExchangeRate(displayCurrency);
 
   // ---- Calls today ----
-  const callsToday = await ds.getRepository(Call).find({
+  const callsToday = await ds.getRepository<Call>("calls").find({
     where: { restaurantId, startedAt: MoreThanOrEqual(todayStart) },
     order: { startedAt: "DESC" },
   });
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
   }));
 
   // ---- Orders today ----
-  const ordersToday = await ds.getRepository(Order).find({
+  const ordersToday = await ds.getRepository<Order>("orders").find({
     where: { restaurantId, createdAt: MoreThanOrEqual(todayStart) },
   });
 
@@ -135,10 +135,10 @@ export async function GET(req: NextRequest) {
   }));
 
   // ---- Weekly stats ----
-  const callsWeek = await ds.getRepository(Call).find({
+  const callsWeek = await ds.getRepository<Call>("calls").find({
     where: { restaurantId, startedAt: MoreThanOrEqual(weekStart) },
   });
-  const ordersWeek = await ds.getRepository(Order).find({
+  const ordersWeek = await ds.getRepository<Order>("orders").find({
     where: { restaurantId, createdAt: MoreThanOrEqual(weekStart) },
   });
 
@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ---- Top customers ----
-  const topCustomers = await ds.getRepository(Customer).find({
+  const topCustomers = await ds.getRepository<Customer>("customers").find({
     where: { restaurantId },
     order: { totalOrders: "DESC" },
     take: 5,
@@ -243,7 +243,7 @@ export async function GET(req: NextRequest) {
   const uniqueCallers = new Set(callsToday.map((c) => c.callerNumber)).size;
 
   // Total customers for this restaurant
-  const totalCustomers = await ds.getRepository(Customer).count({
+  const totalCustomers = await ds.getRepository<Customer>("customers").count({
     where: { restaurantId },
   });
 

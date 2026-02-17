@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Call, type CallOutcome } from "@/db/entities/Call";
+import type { Call, CallOutcome } from "@/db/entities/Call";
 
 // GET /api/calls?restaurantId=xxx&limit=20
 export async function GET(req: NextRequest) {
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   // Cleanup: marquer abandoned les appels in_progress dépassant MAX_CALL_DURATION
   const maxDuration = parseInt(process.env.MAX_CALL_DURATION || "600");
   const cutoff = new Date(Date.now() - maxDuration * 1000);
-  const repo = ds.getRepository(Call);
+  const repo = ds.getRepository<Call>("calls");
   const stale = await repo.find({
     where: { restaurantId, outcome: "in_progress" },
   });
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "restaurantId required (body or finalContext)" }, { status: 400 });
   }
 
-  const call = ds.getRepository(Call).create({
+  const call = ds.getRepository<Call>("calls").create({
     restaurantId,
     customerId: body.customerId || ctx.customer_id || null,
     callerNumber: body.callerPhone || body.callerNumber || "",
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     outputAudioTokens: tokens.outputAudioTokens || body.outputAudioTokens || 0,
   } as Partial<Call>) as Call;
 
-  const saved = await ds.getRepository(Call).save(call);
+  const saved = await ds.getRepository<Call>("calls").save(call);
   return NextResponse.json(saved, { status: 201 });
 }
 
@@ -104,8 +104,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  await ds.getRepository(Call).update(id, updates);
-  const updated = await ds.getRepository(Call).findOneBy({ id });
+  await ds.getRepository<Call>("calls").update(id, updates);
+  const updated = await ds.getRepository<Call>("calls").findOneBy({ id });
 
   return NextResponse.json(updated);
 }

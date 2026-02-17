@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { PhoneLine } from "@/db/entities/PhoneLine";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { PhoneLine } from "@/db/entities/PhoneLine";
 import { decryptSipPassword } from "@/services/sip-encryption.service";
 import {
   provisionAgent,
@@ -15,7 +15,7 @@ async function loadSipCreds(restaurantId: string): Promise<{
   password: string;
 } | null> {
   const ds = await getDb();
-  const phoneLine = await ds.getRepository(PhoneLine).findOneBy({ restaurantId });
+  const phoneLine = await ds.getRepository<PhoneLine>("phone_lines").findOneBy({ restaurantId });
   if (!phoneLine?.sipDomain || !phoneLine?.sipUsername || !phoneLine?.sipPassword) {
     return null;
   }
@@ -38,14 +38,14 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
 
   if (id) {
-    const restaurant = await ds.getRepository(Restaurant).findOneBy({ id });
+    const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id });
     if (!restaurant) {
       return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
     }
     return NextResponse.json(restaurant);
   }
 
-  const restaurants = await ds.getRepository(Restaurant).find({
+  const restaurants = await ds.getRepository<Restaurant>("restaurants").find({
     where: { isActive: true },
     order: { createdAt: "DESC" },
   });
@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
   const ds = await getDb();
   const body = await req.json();
 
-  const restaurant = ds.getRepository(Restaurant).create(body as Partial<Restaurant>);
-  const saved = await ds.getRepository(Restaurant).save(restaurant) as Restaurant;
+  const restaurant = ds.getRepository<Restaurant>("restaurants").create(body as Partial<Restaurant>);
+  const saved = await ds.getRepository<Restaurant>("restaurants").save(restaurant) as Restaurant;
 
   // Auto-provision agent + FinalCustomer dans sip-agent-server
   const sip = await loadSipCreds(saved.id);
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
   if (agentId || finalCustomerId) {
     if (agentId) saved.agentId = agentId;
     if (finalCustomerId) saved.finalCustomerId = finalCustomerId;
-    await ds.getRepository(Restaurant).save(saved);
+    await ds.getRepository<Restaurant>("restaurants").save(saved);
   }
 
   return NextResponse.json(saved, { status: 201 });
@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  const restaurant = await ds.getRepository(Restaurant).findOneBy({ id });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id });
   if (!restaurant) {
     return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
   }
@@ -100,7 +100,7 @@ export async function PATCH(req: NextRequest) {
   const hadAgent = !!restaurant.agentId;
 
   Object.assign(restaurant, updates);
-  const saved = await ds.getRepository(Restaurant).save(restaurant);
+  const saved = await ds.getRepository<Restaurant>("restaurants").save(restaurant);
 
   // Pas encore d'agent → provisionner si sipEnabled
   if (!hadAgent && !saved.agentId && saved.sipEnabled) {
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest) {
     if (agentId || finalCustomerId) {
       if (agentId) saved.agentId = agentId;
       if (finalCustomerId) saved.finalCustomerId = finalCustomerId;
-      await ds.getRepository(Restaurant).save(saved);
+      await ds.getRepository<Restaurant>("restaurants").save(saved);
     }
   }
   // Agent existant → sync nom/voix/timezone/config flags si changé

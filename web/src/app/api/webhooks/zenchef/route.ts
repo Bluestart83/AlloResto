@@ -3,7 +3,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
+import type { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
 import { processInboundWebhook } from "@/services/sync/workers/inbound-sync.worker";
 import { createSyncLog } from "@/services/sync/sync-log.service";
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   // Trouver la SyncPlatformConfig qui correspond
   const db = await getDb();
-  const configs = await db.getRepository(SyncPlatformConfig).find({
+  const configs = await db.getRepository<SyncPlatformConfig>("sync_platform_configs").find({
     where: { platform: "zenchef", isActive: true },
   });
 

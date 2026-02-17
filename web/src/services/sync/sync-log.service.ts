@@ -3,7 +3,7 @@
  * Chaque échange avec une plateforme est journalisé pour audit, debug, et retry.
  */
 import { getDb } from "@/lib/db";
-import { SyncLog } from "@/db/entities/SyncLog";
+import type { SyncLog } from "@/db/entities/SyncLog";
 import type { SyncDirection, SyncAction, SyncStatus } from "@/db/entities/SyncLog";
 
 export interface CreateSyncLogParams {
@@ -31,7 +31,7 @@ const MAX_RETRIES = 5;
  */
 export async function createSyncLog(params: CreateSyncLogParams): Promise<SyncLog> {
   const db = await getDb();
-  const repo = db.getRepository(SyncLog);
+  const repo = db.getRepository<SyncLog>("sync_logs");
 
   const log = repo.create({
     restaurantId: params.restaurantId,
@@ -58,7 +58,7 @@ export async function createSyncLog(params: CreateSyncLogParams): Promise<SyncLo
  */
 export async function scheduleRetry(logId: string): Promise<boolean> {
   const db = await getDb();
-  const repo = db.getRepository(SyncLog);
+  const repo = db.getRepository<SyncLog>("sync_logs");
 
   const log = await repo.findOneBy({ id: logId });
   if (!log) return false;
@@ -85,7 +85,7 @@ export async function scheduleRetry(logId: string): Promise<boolean> {
  */
 export async function getPendingRetries(limit = 50): Promise<SyncLog[]> {
   const db = await getDb();
-  const repo = db.getRepository(SyncLog);
+  const repo = db.getRepository<SyncLog>("sync_logs");
 
   return repo
     .createQueryBuilder("log")

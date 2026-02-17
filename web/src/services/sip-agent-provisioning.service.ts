@@ -160,11 +160,6 @@ export async function provisionAgent(restaurant: {
           orderStatusEnabled: restaurant.orderStatusEnabled ?? true,
           transferEnabled: !!(restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic),
         },
-        sipTransport: restaurant.sip?.transport || null,
-        stunServer: restaurant.sip?.stunServer || null,
-        sipDomain: restaurant.sip?.domain || null,
-        sipUsername: restaurant.sip?.username || null,
-        sipPassword: restaurant.sip?.password || null,
         isActive: true,
       }),
     });
@@ -184,6 +179,20 @@ export async function provisionAgent(restaurant: {
     console.log(
       `[sip-provisioning] Agent created: ${agent.id} (token: ${agent.apiToken})`
     );
+
+    // Crée la PhoneLine (SIP ou Twilio selon config)
+    if (restaurant.phone) {
+      const isSip = !!restaurant.sip?.domain;
+      await upsertPhoneLine(agent.id, restaurant.phone, {
+        provider: isSip ? "sip" : "twilio",
+        sipTransport: restaurant.sip?.transport || null,
+        stunServer: restaurant.sip?.stunServer || null,
+        sipDomain: restaurant.sip?.domain || null,
+        sipUsername: restaurant.sip?.username || null,
+        sipPassword: restaurant.sip?.password || undefined,
+        isActive: true,
+      });
+    }
 
     // Crée les 12 ToolConfigs
     for (const toolDef of ALLORESTO_TOOL_DEFINITIONS) {
@@ -312,11 +321,6 @@ export async function updateAgent(
     name?: string;
     aiVoice?: string;
     timezone?: string;
-    sipTransport?: string;
-    stunServer?: string;
-    sipDomain?: string;
-    sipUsername?: string;
-    sipPassword?: string;
     isActive?: boolean;
     maxCallDurationSec?: number;
     apiBaseUrl?: string;
@@ -338,5 +342,62 @@ export async function updateAgent(
     }
   } catch (err) {
     console.error("[sip-provisioning] Agent update failed:", err);
+  }
+}
+
+// ─── Phone Line CRUD (sip-agent-server) ──────────────────────────────────────
+
+export async function upsertPhoneLine(
+  agentId: string,
+  phoneNumber: string,
+  updates: {
+    provider?: string;
+    sipTransport?: string | null;
+    stunServer?: string | null;
+    sipDomain?: string | null;
+    sipUsername?: string | null;
+    sipPassword?: string;
+    twilioTrunkSid?: string | null;
+    isActive?: boolean;
+  }
+): Promise<string | null> {
+  try {
+    // Check if phone line exists
+    const listResp = await sipFetch(`/agents/${agentId}/phone-lines`);
+    if (!listResp.ok) {
+      console.error(`[sip-provisioning] PhoneLine list failed: ${listResp.status}`);
+      return null;
+    }
+    const lines = await listResp.json() as any[];
+    const existing = lines.find((l: any) => l.phoneNumber === phoneNumber);
+
+    if (existing) {
+      // Update
+      const resp = await sipFetch(`/agents/${agentId}/phone-lines/${existing.id}`, {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      });
+      if (!resp.ok) {
+        console.error(`[sip-provisioning] PhoneLine update failed: ${resp.status}`);
+        return existing.id;
+      }
+      const updated = await resp.json() as any;
+      return updated.id;
+    } else {
+      // Create
+      const resp = await sipFetch(`/agents/${agentId}/phone-lines`, {
+        method: "POST",
+        body: JSON.stringify({ phoneNumber, ...updates }),
+      });
+      if (!resp.ok) {
+        console.error(`[sip-provisioning] PhoneLine create failed: ${resp.status}`);
+        return null;
+      }
+      const created = await resp.json() as any;
+      return created.id;
+    }
+  } catch (err) {
+    console.error("[sip-provisioning] PhoneLine upsert failed:", err);
+    return null;
   }
 }

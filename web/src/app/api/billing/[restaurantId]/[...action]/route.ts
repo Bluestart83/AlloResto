@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { ROLE_ADMIN } from "@/lib/roles";
 import { getDb } from "@/lib/db";
-import { Restaurant } from "@/db/entities/Restaurant";
+import type { Restaurant } from "@/db/entities/Restaurant";
 
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
@@ -36,7 +36,7 @@ async function proxyRequest(
 
   // Charger le restaurant pour obtenir finalCustomerId
   const ds = await getDb();
-  const restaurant = await ds.getRepository(Restaurant).findOneBy({ id: restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
   if (!restaurant) {
     return NextResponse.json({ error: "Restaurant introuvable" }, { status: 404 });
   }

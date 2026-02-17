@@ -2,9 +2,9 @@
  * Outbound sync — propage les modifications locales vers les plateformes externes.
  */
 import { getDb } from "@/lib/db";
-import { Reservation } from "@/db/entities/Reservation";
-import { Order } from "@/db/entities/Order";
-import { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
+import type { Reservation } from "@/db/entities/Reservation";
+import type { Order } from "@/db/entities/Order";
+import type { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
 import { getConnector } from "../connectors/connector.registry";
 import { ZenchefConnector } from "../connectors/zenchef/zenchef.connector";
 import { findMapping, upsertMapping, findMappingsForEntity } from "../external-mapping.service";
@@ -34,7 +34,7 @@ export async function syncReservationOutbound(
 
   // Pour les nouvelles réservations, push vers toutes les configs actives qui sync "reservation"
   if (action === "create") {
-    const configs = await db.getRepository(SyncPlatformConfig).find({
+    const configs = await db.getRepository<SyncPlatformConfig>("sync_platform_configs").find({
       where: { restaurantId: reservation.restaurantId, isActive: true },
     });
     for (const c of configs) {
@@ -159,7 +159,7 @@ async function syncReservationToPlatform(
     // Stocker l'externalId sur l'entité si pas encore renseigné
     if (!reservation.externalId) {
       const db = await getDb();
-      await db.getRepository(Reservation).update(reservation.id, {
+      await db.getRepository<Reservation>("reservations").update(reservation.id, {
         externalId: result.externalId,
         externalRawData: result.rawData,
       });
@@ -275,7 +275,7 @@ export async function syncMenuOutbound(
   items: { id: string; name: string; description?: string; price: number; categoryName?: string; isAvailable: boolean; allergens?: string[]; imageUrl?: string }[],
 ): Promise<void> {
   const db = await getDb();
-  const configs = await db.getRepository(SyncPlatformConfig).find({
+  const configs = await db.getRepository<SyncPlatformConfig>("sync_platform_configs").find({
     where: { restaurantId, isActive: true },
   });
 
@@ -337,7 +337,7 @@ export async function syncTablesOutbound(
   tables: { id: string; label: string; seats: number; diningRoomName?: string; isActive: boolean }[],
 ): Promise<void> {
   const db = await getDb();
-  const configs = await db.getRepository(SyncPlatformConfig).find({
+  const configs = await db.getRepository<SyncPlatformConfig>("sync_platform_configs").find({
     where: { restaurantId, isActive: true },
   });
 
@@ -399,7 +399,7 @@ export async function syncCustomerOutbound(
   customer: { id: string; firstName?: string; lastName?: string; phone?: string; email?: string; locale?: string },
 ): Promise<void> {
   const db = await getDb();
-  const configs = await db.getRepository(SyncPlatformConfig).find({
+  const configs = await db.getRepository<SyncPlatformConfig>("sync_platform_configs").find({
     where: { restaurantId, isActive: true },
   });
 

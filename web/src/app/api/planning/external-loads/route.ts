@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ExternalLoad } from "@/db/entities/ExternalLoad";
+import type { ExternalLoad } from "@/db/entities/ExternalLoad";
 import { MoreThanOrEqual } from "typeorm";
 import { INTENSITY_POINTS } from "@/types/planning";
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       where.endTime = MoreThanOrEqual(new Date());
     }
 
-    const loads = await ds.getRepository(ExternalLoad).find({
+    const loads = await ds.getRepository<ExternalLoad>("external_loads").find({
       where,
       order: { startTime: "ASC" },
     });
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const pointsPerSlot = INTENSITY_POINTS[intensity as keyof typeof INTENSITY_POINTS] || 4;
 
     const ds = await getDb();
-    const load = ds.getRepository(ExternalLoad).create({
+    const load = ds.getRepository<ExternalLoad>("external_loads").create({
       restaurantId,
       type,
       resource,
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       label: label || null,
     } as Partial<ExternalLoad>) as ExternalLoad;
 
-    await ds.getRepository(ExternalLoad).save(load);
+    await ds.getRepository<ExternalLoad>("external_loads").save(load);
     return NextResponse.json(load, { status: 201 });
   } catch (err: any) {
     console.error("[POST /api/planning/external-loads]", err);
@@ -76,7 +76,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const ds = await getDb();
-    const repo = ds.getRepository(ExternalLoad);
+    const repo = ds.getRepository<ExternalLoad>("external_loads");
     const load = await repo.findOneByOrFail({ id });
 
     // Recalculate end time if duration or start changed
@@ -109,7 +109,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const ds = await getDb();
-    await ds.getRepository(ExternalLoad).delete(id);
+    await ds.getRepository<ExternalLoad>("external_loads").delete(id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[DELETE /api/planning/external-loads]", err);

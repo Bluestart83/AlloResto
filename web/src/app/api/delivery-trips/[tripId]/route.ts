@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { DeliveryTrip } from "@/db/entities/DeliveryTrip";
-import { Order } from "@/db/entities/Order";
+import type { DeliveryTrip } from "@/db/entities/DeliveryTrip";
+import type { Order } from "@/db/entities/Order";
 import type { TripStop } from "@/db/entities/DeliveryTrip";
 
 // GET /api/delivery-trips/[tripId]
@@ -12,7 +12,7 @@ export async function GET(
   const { tripId } = await params;
   const ds = await getDb();
 
-  const trip = await ds.getRepository(DeliveryTrip).findOneBy({ id: tripId });
+  const trip = await ds.getRepository<DeliveryTrip>("delivery_trips").findOneBy({ id: tripId });
   if (!trip) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
@@ -31,7 +31,7 @@ export async function PATCH(
   const body = await req.json();
   const { action, orderId } = body;
 
-  const trip = await ds.getRepository(DeliveryTrip).findOneBy({ id: tripId });
+  const trip = await ds.getRepository<DeliveryTrip>("delivery_trips").findOneBy({ id: tripId });
   if (!trip) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
@@ -43,7 +43,7 @@ export async function PATCH(
       }
       trip.status = "in_progress";
       trip.startedAt = new Date();
-      await ds.getRepository(DeliveryTrip).save(trip);
+      await ds.getRepository<DeliveryTrip>("delivery_trips").save(trip);
       break;
     }
 
@@ -67,7 +67,7 @@ export async function PATCH(
       trip.stops = stops;
 
       // Passer la commande en completed
-      await ds.getRepository(Order).update(orderId, { status: "completed" });
+      await ds.getRepository<Order>("orders").update(orderId, { status: "completed" });
 
       // Si tous les stops sont livrés → auto-complete le trip
       const allDelivered = stops.every((s) => s.deliveredAt !== null);
@@ -76,35 +76,35 @@ export async function PATCH(
         trip.completedAt = new Date();
       }
 
-      await ds.getRepository(DeliveryTrip).save(trip);
+      await ds.getRepository<DeliveryTrip>("delivery_trips").save(trip);
       break;
     }
 
     case "complete": {
       trip.status = "completed";
       trip.completedAt = new Date();
-      await ds.getRepository(DeliveryTrip).save(trip);
+      await ds.getRepository<DeliveryTrip>("delivery_trips").save(trip);
 
       // Marquer toutes les commandes restantes comme completed
       for (const stop of trip.stops) {
         if (!stop.deliveredAt) {
           stop.deliveredAt = new Date().toISOString();
-          await ds.getRepository(Order).update(stop.orderId, { status: "completed" });
+          await ds.getRepository<Order>("orders").update(stop.orderId, { status: "completed" });
         }
       }
       trip.stops = [...trip.stops]; // force update
-      await ds.getRepository(DeliveryTrip).save(trip);
+      await ds.getRepository<DeliveryTrip>("delivery_trips").save(trip);
       break;
     }
 
     case "cancel": {
       trip.status = "cancelled";
-      await ds.getRepository(DeliveryTrip).save(trip);
+      await ds.getRepository<DeliveryTrip>("delivery_trips").save(trip);
 
       // Remettre toutes les commandes en "ready" et détacher du trip
       for (const stop of trip.stops) {
         if (!stop.deliveredAt) {
-          await ds.getRepository(Order).update(stop.orderId, {
+          await ds.getRepository<Order>("orders").update(stop.orderId, {
             tripId: null as any,
             status: "ready",
           });
@@ -121,6 +121,6 @@ export async function PATCH(
   }
 
   // Recharger le trip à jour
-  const updated = await ds.getRepository(DeliveryTrip).findOneBy({ id: tripId });
+  const updated = await ds.getRepository<DeliveryTrip>("delivery_trips").findOneBy({ id: tripId });
   return NextResponse.json(updated);
 }

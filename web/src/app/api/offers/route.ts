@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Offer } from "@/db/entities/Offer";
+import type { Offer } from "@/db/entities/Offer";
 
 // GET /api/offers?restaurantId=X
 export async function GET(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   const db = await getDb();
-  const offers = await db.getRepository(Offer).find({
+  const offers = await db.getRepository<Offer>("offers").find({
     where: { restaurantId },
     order: { isActive: "DESC", name: "ASC" },
   });
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(Offer);
+  const repo = db.getRepository<Offer>("offers");
   const offer = repo.create({
     restaurantId: body.restaurantId,
     name: body.name,
@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(Offer);
+  const repo = db.getRepository<Offer>("offers");
   const offer = await repo.findOneBy({ id });
   if (!offer) {
     return NextResponse.json({ error: "Offer not found" }, { status: 404 });
@@ -91,7 +91,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(Offer);
+  const repo = db.getRepository<Offer>("offers");
   const offer = await repo.findOneBy({ id });
   if (!offer) {
     return NextResponse.json({ error: "Offer not found" }, { status: 404 });

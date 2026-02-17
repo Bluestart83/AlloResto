@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AppDataSource } from "@/db/data-source";
-import { BlockedPhone } from "@/db/entities/BlockedPhone";
+import type { BlockedPhone } from "@/db/entities/BlockedPhone";
 
 async function getDs() {
   const ds = AppDataSource;
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const entry = await ds.getRepository(BlockedPhone).findOneBy({
+    const entry = await ds.getRepository<BlockedPhone>("blocked_phones").findOneBy({
       restaurantId,
       phone,
     });

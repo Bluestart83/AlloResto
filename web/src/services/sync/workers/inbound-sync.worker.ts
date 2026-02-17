@@ -2,9 +2,9 @@
  * Inbound sync — traite les webhooks entrants des plateformes.
  */
 import { getDb } from "@/lib/db";
-import { Reservation } from "@/db/entities/Reservation";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { Customer } from "@/db/entities/Customer";
+import type { Reservation } from "@/db/entities/Reservation";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { Customer } from "@/db/entities/Customer";
 import { getConnector } from "../connectors/connector.registry";
 import { findByExternalId, upsertMapping } from "../external-mapping.service";
 import { createSyncLog } from "../sync-log.service";
@@ -84,7 +84,7 @@ async function handleReservationCreated(
 
   // Vérifier via external_reference_id (= notre reservation.id envoyé lors du create outbound)
   if (data.externalReferenceId) {
-    const localReservation = await db.getRepository(Reservation).findOneBy({
+    const localReservation = await db.getRepository<Reservation>("reservations").findOneBy({
       id: data.externalReferenceId,
     });
     if (localReservation) {
@@ -113,7 +113,7 @@ async function handleReservationCreated(
   }
 
   // Charger le restaurant pour les défauts
-  const restaurant = await db.getRepository(Restaurant).findOneBy({ id: restaurantId });
+  const restaurant = await db.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
   if (!restaurant) throw new Error(`Restaurant not found: ${restaurantId}`);
 
   // Upsert client
@@ -128,7 +128,7 @@ async function handleReservationCreated(
   const endTime = new Date(reservationTime.getTime() + durationMin * 60_000);
 
   // Créer la réservation
-  const repo = db.getRepository(Reservation);
+  const repo = db.getRepository<Reservation>("reservations");
   const reservation = repo.create({
     restaurantId,
     customerId,
@@ -195,7 +195,7 @@ async function handleReservationUpdated(
     return handleReservationCreated(platform, restaurantId, event, startMs);
   }
 
-  const repo = db.getRepository(Reservation);
+  const repo = db.getRepository<Reservation>("reservations");
   const reservation = await repo.findOneBy({ id: mapping.entityId });
   if (!reservation) {
     return handleReservationCreated(platform, restaurantId, event, startMs);
@@ -335,7 +335,7 @@ async function handleReservationCancelled(
     return;
   }
 
-  const repo = db.getRepository(Reservation);
+  const repo = db.getRepository<Reservation>("reservations");
   const reservation = await repo.findOneBy({ id: mapping.entityId });
   if (!reservation) return;
 
@@ -390,7 +390,7 @@ async function handleReservationStatusChanged(
   const mapping = await findByExternalId(platform, event.externalId, "reservation");
   if (!mapping) return;
 
-  const repo = db.getRepository(Reservation);
+  const repo = db.getRepository<Reservation>("reservations");
   const reservation = await repo.findOneBy({ id: mapping.entityId });
   if (!reservation) return;
 
@@ -491,7 +491,7 @@ async function upsertCustomer(
   if (!data.customerPhone) return null;
 
   const db = await getDb();
-  const repo = db.getRepository(Customer);
+  const repo = db.getRepository<Customer>("customers");
 
   let customer = await repo.findOneBy({
     restaurantId,

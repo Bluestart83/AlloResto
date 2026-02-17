@@ -16,10 +16,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Order } from "@/db/entities/Order";
-import { OrderItem } from "@/db/entities/OrderItem";
-import { Customer } from "@/db/entities/Customer";
-import { Call } from "@/db/entities/Call";
+import type { Order } from "@/db/entities/Order";
+import type { OrderItem } from "@/db/entities/OrderItem";
+import type { Customer } from "@/db/entities/Customer";
+import type { Call } from "@/db/entities/Call";
 import { scheduleOrder } from "@/services/planning-engine.service";
 import { classifyOrderSize } from "@/types/planning";
 
@@ -162,16 +162,16 @@ export async function POST(req: NextRequest) {
 
     const ds = await getDb();
 
-    const order = ds.getRepository(Order).create(orderData as Partial<Order>) as Order;
-    const savedOrder = await ds.getRepository(Order).save(order) as Order;
+    const order = ds.getRepository<Order>("orders").create(orderData as Partial<Order>) as Order;
+    const savedOrder = await ds.getRepository<Order>("orders").save(order) as Order;
 
     // Create order items
     for (const item of resolvedItems) {
-      const orderItem = ds.getRepository(OrderItem).create({
+      const orderItem = ds.getRepository<OrderItem>("order_items").create({
         ...item,
         orderId: savedOrder.id,
       } as Partial<OrderItem>) as OrderItem;
-      await ds.getRepository(OrderItem).save(orderItem);
+      await ds.getRepository<OrderItem>("order_items").save(orderItem);
     }
 
     // NOTE: Call outcome is updated by the webhook at end of call, not here.
@@ -179,12 +179,12 @@ export async function POST(req: NextRequest) {
 
     // Update customer stats
     if (customerId) {
-      const customer = await ds.getRepository(Customer).findOneBy({ id: customerId });
+      const customer = await ds.getRepository<Customer>("customers").findOneBy({ id: customerId });
       if (customer) {
         customer.totalOrders += 1;
         customer.totalSpent = Number(customer.totalSpent) + Number(total || 0);
         customer.lastOrderAt = new Date();
-        await ds.getRepository(Customer).save(customer);
+        await ds.getRepository<Customer>("customers").save(customer);
       }
     }
 

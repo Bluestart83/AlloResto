@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { PhoneLine } from "@/db/entities/PhoneLine";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { PhoneLine } from "@/db/entities/PhoneLine";
 import { decryptSipPassword, isEncrypted } from "@/services/sip-encryption.service";
 
 /**
@@ -13,7 +13,7 @@ import { decryptSipPassword, isEncrypted } from "@/services/sip-encryption.servi
 export async function GET() {
   const ds = await getDb();
 
-  const restaurants = await ds.getRepository(Restaurant).find({
+  const restaurants = await ds.getRepository<Restaurant>("restaurants").find({
     where: { isActive: true, sipEnabled: true },
     relations: ["phoneLine"],
   });

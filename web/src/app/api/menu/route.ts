@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { MenuCategory } from "@/db/entities/MenuCategory";
-import { MenuItem } from "@/db/entities/MenuItem";
+import type { MenuCategory } from "@/db/entities/MenuCategory";
+import type { MenuItem } from "@/db/entities/MenuItem";
 
 // GET /api/menu?restaurantId=xxx — menu complet (catégories + items)
 export async function GET(req: NextRequest) {
@@ -12,12 +12,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "restaurantId required" }, { status: 400 });
   }
 
-  const categories = await ds.getRepository(MenuCategory).find({
+  const categories = await ds.getRepository<MenuCategory>("menu_categories").find({
     where: { restaurantId },
     order: { displayOrder: "ASC" },
   });
 
-  const items = await ds.getRepository(MenuItem).find({
+  const items = await ds.getRepository<MenuItem>("menu_items").find({
     where: { restaurantId },
     order: { displayOrder: "ASC" },
   });
@@ -31,13 +31,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
 
   if (body.type === "category") {
-    const cat = ds.getRepository(MenuCategory).create(body.data as Partial<MenuCategory>) as MenuCategory;
-    const saved = await ds.getRepository(MenuCategory).save(cat);
+    const cat = ds.getRepository<MenuCategory>("menu_categories").create(body.data as Partial<MenuCategory>) as MenuCategory;
+    const saved = await ds.getRepository<MenuCategory>("menu_categories").save(cat);
     return NextResponse.json(saved, { status: 201 });
   }
 
-  const item = ds.getRepository(MenuItem).create((body.data || body) as Partial<MenuItem>) as MenuItem;
-  const saved = await ds.getRepository(MenuItem).save(item);
+  const item = ds.getRepository<MenuItem>("menu_items").create((body.data || body) as Partial<MenuItem>) as MenuItem;
+  const saved = await ds.getRepository<MenuItem>("menu_items").save(item);
   return NextResponse.json(saved, { status: 201 });
 }
 
@@ -47,11 +47,11 @@ export async function PATCH(req: NextRequest) {
   const { id, type, ...updates } = await req.json();
 
   if (type === "category") {
-    await ds.getRepository(MenuCategory).update(id, updates);
+    await ds.getRepository<MenuCategory>("menu_categories").update(id, updates);
     return NextResponse.json({ success: true });
   }
 
-  await ds.getRepository(MenuItem).update(id, updates);
+  await ds.getRepository<MenuItem>("menu_items").update(id, updates);
   return NextResponse.json({ success: true });
 }
 
@@ -66,9 +66,9 @@ export async function DELETE(req: NextRequest) {
   }
 
   if (type === "category") {
-    await ds.getRepository(MenuCategory).delete(id);
+    await ds.getRepository<MenuCategory>("menu_categories").delete(id);
   } else {
-    await ds.getRepository(MenuItem).delete(id);
+    await ds.getRepository<MenuItem>("menu_items").delete(id);
   }
 
   return NextResponse.json({ success: true });

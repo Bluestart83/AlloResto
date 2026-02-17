@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AppDataSource } from "@/db/data-source";
-import { DiningTable } from "@/db/entities/DiningTable";
+import type { DiningTable } from "@/db/entities/DiningTable";
 
 async function getDs() {
   const ds = AppDataSource;
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "restaurantId or roomId required" }, { status: 400 });
     }
 
-    const tables = await ds.getRepository(DiningTable).find({
+    const tables = await ds.getRepository<DiningTable>("dining_tables").find({
       where,
       order: { displayOrder: "ASC", tableNumber: "ASC" },
     });
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const repo = ds.getRepository(DiningTable);
+    const repo = ds.getRepository<DiningTable>("dining_tables");
     const table = repo.create({
       restaurantId: body.restaurantId,
       diningRoomId: body.diningRoomId,
@@ -79,8 +79,8 @@ export async function PATCH(req: NextRequest) {
     if (body.displayOrder !== undefined) updates.displayOrder = body.displayOrder;
     if (body.diningRoomId !== undefined) updates.diningRoomId = body.diningRoomId;
 
-    await ds.getRepository(DiningTable).update(body.id, updates);
-    const updated = await ds.getRepository(DiningTable).findOneBy({ id: body.id });
+    await ds.getRepository<DiningTable>("dining_tables").update(body.id, updates);
+    const updated = await ds.getRepository<DiningTable>("dining_tables").findOneBy({ id: body.id });
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -96,7 +96,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
 
-    await ds.getRepository(DiningTable).delete(id);
+    await ds.getRepository<DiningTable>("dining_tables").delete(id);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

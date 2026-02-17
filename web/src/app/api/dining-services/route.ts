@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { DiningService } from "@/db/entities/DiningService";
+import type { DiningService } from "@/db/entities/DiningService";
 
 // GET /api/dining-services?restaurantId=X
 export async function GET(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   const db = await getDb();
-  const services = await db.getRepository(DiningService).find({
+  const services = await db.getRepository<DiningService>("dining_services").find({
     where: { restaurantId },
     order: { displayOrder: "ASC", name: "ASC" },
   });
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(DiningService);
+  const repo = db.getRepository<DiningService>("dining_services");
   const service = repo.create({
     restaurantId: body.restaurantId,
     name: body.name,
@@ -65,7 +65,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(DiningService);
+  const repo = db.getRepository<DiningService>("dining_services");
   const service = await repo.findOneBy({ id });
   if (!service) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });
@@ -95,7 +95,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   const db = await getDb();
-  const repo = db.getRepository(DiningService);
+  const repo = db.getRepository<DiningService>("dining_services");
   const service = await repo.findOneBy({ id });
   if (!service) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });

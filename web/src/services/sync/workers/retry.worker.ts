@@ -2,9 +2,9 @@
  * Retry worker — traite les syncs échouées avec exponential backoff.
  */
 import { getDb } from "@/lib/db";
-import { SyncLog } from "@/db/entities/SyncLog";
-import { Reservation } from "@/db/entities/Reservation";
-import { Order } from "@/db/entities/Order";
+import type { SyncLog } from "@/db/entities/SyncLog";
+import type { Reservation } from "@/db/entities/Reservation";
+import type { Order } from "@/db/entities/Order";
 import { getPendingRetries } from "../sync-log.service";
 import { isSupportedPlatform } from "../connectors/connector.registry";
 import { syncReservationOutbound, syncOrderOutbound } from "./outbound-sync.worker";
@@ -48,7 +48,7 @@ async function retryOneLog(log: SyncLog): Promise<void> {
   const db = await getDb();
 
   if (!isSupportedPlatform(log.platform)) {
-    await db.getRepository(SyncLog).update(log.id, {
+    await db.getRepository<SyncLog>("sync_logs").update(log.id, {
       status: "failed",
       errorMessage: `Platform "${log.platform}" not supported`,
     });
@@ -66,7 +66,7 @@ async function retryOutbound(log: SyncLog): Promise<void> {
   const db = await getDb();
 
   if (log.entityType === "reservation" && log.entityId) {
-    const reservation = await db.getRepository(Reservation).findOneBy({
+    const reservation = await db.getRepository<Reservation>("reservations").findOneBy({
       id: log.entityId,
     });
     if (!reservation) {
@@ -76,7 +76,7 @@ async function retryOutbound(log: SyncLog): Promise<void> {
     await syncReservationOutbound(reservation, (log.action || "update") as SyncAction);
     await markLogSucceeded(log.id);
   } else if (log.entityType === "order" && log.entityId) {
-    const order = await db.getRepository(Order).findOne({
+    const order = await db.getRepository<Order>("orders").findOne({
       where: { id: log.entityId },
       relations: ["items"],
     });
@@ -111,12 +111,12 @@ async function retryInbound(log: SyncLog): Promise<void> {
 
 async function markLogSucceeded(logId: string): Promise<void> {
   const db = await getDb();
-  await db.getRepository(SyncLog).update(logId, { status: "success" });
+  await db.getRepository<SyncLog>("sync_logs").update(logId, { status: "success" });
 }
 
 async function markLogFailed(logId: string, reason: string): Promise<void> {
   const db = await getDb();
-  await db.getRepository(SyncLog).update(logId, {
+  await db.getRepository<SyncLog>("sync_logs").update(logId, {
     status: "failed",
     errorMessage: reason,
   });

@@ -4,7 +4,8 @@
  */
 import type { PlatformConnector } from "./connector.interface";
 import { getDb } from "@/lib/db";
-import { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
+import type { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
+import type { Restaurant } from "@/db/entities/Restaurant";
 import { ZenchefConnector } from "./zenchef/zenchef.connector";
 
 // ---------------------------------------------------------------------------
@@ -49,7 +50,7 @@ export async function getConnector(
   }
 
   const db = await getDb();
-  const config = await db.getRepository(SyncPlatformConfig).findOneBy({
+  const config = await db.getRepository<SyncPlatformConfig>("sync_platform_configs").findOneBy({
     restaurantId,
     platform,
     isActive: true,
@@ -97,7 +98,7 @@ export async function getActiveConfigs(
   restaurantId: string,
 ): Promise<SyncPlatformConfig[]> {
   const db = await getDb();
-  return db.getRepository(SyncPlatformConfig).find({
+  return db.getRepository<SyncPlatformConfig>("sync_platform_configs").find({
     where: { restaurantId, isActive: true },
   });
 }
@@ -115,7 +116,6 @@ export function isSupportedPlatform(platform: string): boolean {
 
 async function getRestaurantLocale(restaurantId: string): Promise<string> {
   const db = await getDb();
-  const { Restaurant } = await import("@/db/entities/Restaurant");
-  const r = await db.getRepository(Restaurant).findOneBy({ id: restaurantId });
+  const r = await db.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
   return r?.defaultLocale || "fr";
 }

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { DeliveryTrip } from "@/db/entities/DeliveryTrip";
-import { Order } from "@/db/entities/Order";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { OrderItem } from "@/db/entities/OrderItem";
+import type { DeliveryTrip } from "@/db/entities/DeliveryTrip";
+import type { Order } from "@/db/entities/Order";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { OrderItem } from "@/db/entities/OrderItem";
 import { optimizeRoute } from "@/services/route-optimization.service";
 import { In } from "typeorm";
 
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     where.status = status;
   }
 
-  const trips = await ds.getRepository(DeliveryTrip).find({
+  const trips = await ds.getRepository<DeliveryTrip>("delivery_trips").find({
     where,
     order: { createdAt: "DESC" },
     take: 50,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 1. Charger le restaurant (origin)
-  const restaurant = await ds.getRepository(Restaurant).findOneBy({ id: restaurantId });
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
   if (!restaurant) {
     return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
   }
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Charger les commandes
-  const orders = await ds.getRepository(Order).find({
+  const orders = await ds.getRepository<Order>("orders").find({
     where: { id: In(orderIds) },
     relations: ["items"],
   });
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 4. Créer le DeliveryTrip
-  const trip = ds.getRepository(DeliveryTrip).create({
+  const trip = ds.getRepository<DeliveryTrip>("delivery_trips").create({
     restaurantId,
     status: "in_progress",
     stops: result.stops,
@@ -115,11 +115,11 @@ export async function POST(req: NextRequest) {
     startedAt: new Date(),
   } as Partial<DeliveryTrip>) as DeliveryTrip;
 
-  const savedTrip = await ds.getRepository(DeliveryTrip).save(trip);
+  const savedTrip = await ds.getRepository<DeliveryTrip>("delivery_trips").save(trip);
 
   // 5. Mettre à jour les commandes : tripId + status → delivering
   for (const order of orders) {
-    await ds.getRepository(Order).update(order.id, {
+    await ds.getRepository<Order>("orders").update(order.id, {
       tripId: savedTrip.id,
       status: "delivering",
     });

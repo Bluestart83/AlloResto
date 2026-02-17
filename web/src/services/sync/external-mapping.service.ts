@@ -3,7 +3,7 @@
  * Lie une entité interne à son équivalent sur une plateforme.
  */
 import { getDb } from "@/lib/db";
-import { SyncExternalMapping } from "@/db/entities/SyncExternalMapping";
+import type { SyncExternalMapping } from "@/db/entities/SyncExternalMapping";
 
 /**
  * Trouve le mapping pour une entité locale sur une plateforme donnée.
@@ -14,7 +14,7 @@ export async function findMapping(
   platform: string,
 ): Promise<SyncExternalMapping | null> {
   const db = await getDb();
-  return db.getRepository(SyncExternalMapping).findOneBy({ entityType, entityId, platform });
+  return db.getRepository<SyncExternalMapping>("sync_external_mappings").findOneBy({ entityType, entityId, platform });
 }
 
 /**
@@ -28,7 +28,7 @@ export async function findByExternalId(
   const db = await getDb();
   const where: Record<string, any> = { platform, externalId };
   if (entityType) where.entityType = entityType;
-  return db.getRepository(SyncExternalMapping).findOneBy(where);
+  return db.getRepository<SyncExternalMapping>("sync_external_mappings").findOneBy(where);
 }
 
 /**
@@ -39,7 +39,7 @@ export async function findMappingsForEntity(
   entityId: string,
 ): Promise<SyncExternalMapping[]> {
   const db = await getDb();
-  return db.getRepository(SyncExternalMapping).findBy({ entityType, entityId });
+  return db.getRepository<SyncExternalMapping>("sync_external_mappings").findBy({ entityType, entityId });
 }
 
 /**
@@ -55,7 +55,7 @@ export async function upsertMapping(params: {
   syncStatus?: string;
 }): Promise<SyncExternalMapping> {
   const db = await getDb();
-  const repo = db.getRepository(SyncExternalMapping);
+  const repo = db.getRepository<SyncExternalMapping>("sync_external_mappings");
 
   let mapping = await repo.findOneBy({
     entityType: params.entityType,
@@ -96,7 +96,7 @@ export async function updateMappingStatus(
   syncStatus: string,
 ): Promise<void> {
   const db = await getDb();
-  await db.getRepository(SyncExternalMapping).update(id, {
+  await db.getRepository<SyncExternalMapping>("sync_external_mappings").update(id, {
     syncStatus,
     syncedAt: syncStatus === "synced" ? new Date() : undefined,
   });
@@ -111,5 +111,5 @@ export async function deleteMapping(
   platform: string,
 ): Promise<void> {
   const db = await getDb();
-  await db.getRepository(SyncExternalMapping).delete({ entityType, entityId, platform });
+  await db.getRepository<SyncExternalMapping>("sync_external_mappings").delete({ entityType, entityId, platform });
 }

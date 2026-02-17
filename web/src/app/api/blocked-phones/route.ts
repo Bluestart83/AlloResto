@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AppDataSource } from "@/db/data-source";
-import { BlockedPhone } from "@/db/entities/BlockedPhone";
+import type { BlockedPhone } from "@/db/entities/BlockedPhone";
 
 async function getDs() {
   const ds = AppDataSource;
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "restaurantId required" }, { status: 400 });
     }
 
-    const blocked = await ds.getRepository(BlockedPhone).find({
+    const blocked = await ds.getRepository<BlockedPhone>("blocked_phones").find({
       where: { restaurantId },
       order: { createdAt: "DESC" },
     });
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Vérifier si déjà bloqué
-    const existing = await ds.getRepository(BlockedPhone).findOneBy({
+    const existing = await ds.getRepository<BlockedPhone>("blocked_phones").findOneBy({
       restaurantId: body.restaurantId,
       phone: body.phone,
     });
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(existing);
     }
 
-    const repo = ds.getRepository(BlockedPhone);
+    const repo = ds.getRepository<BlockedPhone>("blocked_phones");
     const entry = repo.create({
       restaurantId: body.restaurantId,
       phone: body.phone,
@@ -76,9 +76,9 @@ export async function DELETE(req: NextRequest) {
     const phone = searchParams.get("phone");
 
     if (id) {
-      await ds.getRepository(BlockedPhone).delete(id);
+      await ds.getRepository<BlockedPhone>("blocked_phones").delete(id);
     } else if (restaurantId && phone) {
-      await ds.getRepository(BlockedPhone).delete({ restaurantId, phone });
+      await ds.getRepository<BlockedPhone>("blocked_phones").delete({ restaurantId, phone });
     } else {
       return NextResponse.json(
         { error: "id or (restaurantId + phone) required" },

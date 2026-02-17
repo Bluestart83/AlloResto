@@ -16,16 +16,16 @@
  */
 
 import { getDb } from "@/lib/db";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { PhoneLine } from "@/db/entities/PhoneLine";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { PhoneLine } from "@/db/entities/PhoneLine";
 import { decryptSipPassword, isEncrypted } from "@/services/sip-encryption.service";
-import { MenuCategory } from "@/db/entities/MenuCategory";
-import { MenuItem } from "@/db/entities/MenuItem";
-import { Customer } from "@/db/entities/Customer";
-import { Faq } from "@/db/entities/Faq";
-import { DiningService } from "@/db/entities/DiningService";
-import { Offer } from "@/db/entities/Offer";
-import { PricingConfig } from "@/db/entities/PricingConfig";
+import type { MenuCategory } from "@/db/entities/MenuCategory";
+import type { MenuItem } from "@/db/entities/MenuItem";
+import type { Customer } from "@/db/entities/Customer";
+import type { Faq } from "@/db/entities/Faq";
+import type { DiningService } from "@/db/entities/DiningService";
+import type { Offer } from "@/db/entities/Offer";
+import type { PricingConfig } from "@/db/entities/PricingConfig";
 import { getExchangeRate } from "@/services/exchange-rate.service";
 
 // ============================================================
@@ -1140,7 +1140,7 @@ async function resolveSipCredentials(
 ): Promise<SipCredentials> {
   const ds = await getDb();
 
-  const phoneLine = await ds.getRepository(PhoneLine).findOneBy({
+  const phoneLine = await ds.getRepository<PhoneLine>("phone_lines").findOneBy({
     restaurantId,
     isActive: true,
   });
@@ -1178,23 +1178,23 @@ export async function buildAiSessionConfig(
   const ds = await getDb();
 
   // 1. Restaurant
-  const restaurant = await ds.getRepository(Restaurant).findOneByOrFail({
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneByOrFail({
     id: restaurantId,
   });
 
   // 2. Menu (catégories + tous les items, y compris formules)
-  const categories = await ds.getRepository(MenuCategory).find({
+  const categories = await ds.getRepository<MenuCategory>("menu_categories").find({
     where: { restaurantId, isActive: true },
     order: { displayOrder: "ASC" },
   });
 
-  const items = await ds.getRepository(MenuItem).find({
+  const items = await ds.getRepository<MenuItem>("menu_items").find({
     where: { restaurantId, isAvailable: true },
     order: { displayOrder: "ASC" },
   });
 
   // 3. FAQ répondues (base de connaissances)
-  const faqs = await ds.getRepository(Faq).find({
+  const faqs = await ds.getRepository<Faq>("faqs").find({
     where: { restaurantId, status: "answered" },
     order: { askCount: "DESC" },
   });
@@ -1202,7 +1202,7 @@ export async function buildAiSessionConfig(
   // 4. Client connu ?
   let customerContext: CustomerContext | null = null;
   if (callerPhone) {
-    const customer = await ds.getRepository(Customer).findOneBy({
+    const customer = await ds.getRepository<Customer>("customers").findOneBy({
       restaurantId,
       phone: callerPhone,
     });
@@ -1227,12 +1227,12 @@ export async function buildAiSessionConfig(
   const sipCredentials = await resolveSipCredentials(restaurantId);
 
   // 5b. Services + Offres
-  const diningServices = await ds.getRepository(DiningService).find({
+  const diningServices = await ds.getRepository<DiningService>("dining_services").find({
     where: { restaurantId, isActive: true },
     order: { displayOrder: "ASC" },
   });
 
-  const activeOffers = await ds.getRepository(Offer).find({
+  const activeOffers = await ds.getRepository<Offer>("offers").find({
     where: { restaurantId, isActive: true },
   });
 
@@ -1241,7 +1241,7 @@ export async function buildAiSessionConfig(
   if (restaurant.aiCostMarginPct != null) {
     aiCostMarginPct = Number(restaurant.aiCostMarginPct);
   } else {
-    const pricingConfig = await ds.getRepository(PricingConfig).findOne({ where: {} });
+    const pricingConfig = await ds.getRepository<PricingConfig>("pricing_config").findOne({ where: {} });
     if (pricingConfig) {
       aiCostMarginPct = Number(pricingConfig.defaultMarginPct);
     }

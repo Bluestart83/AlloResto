@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { SyncLog } from "@/db/entities/SyncLog";
+import type { SyncLog } from "@/db/entities/SyncLog";
 import { processRetries } from "@/services/sync/workers/retry.worker";
 
 export async function POST(req: NextRequest) {
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   const db = await getDb();
-  const count = await db.getRepository(SyncLog).count({
+  const count = await db.getRepository<SyncLog>("sync_logs").count({
     where: { status: "retry" as any },
   });
   return NextResponse.json({ pendingRetries: count });

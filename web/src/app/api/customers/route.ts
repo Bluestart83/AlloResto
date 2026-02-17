@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Customer } from "@/db/entities/Customer";
+import type { Customer } from "@/db/entities/Customer";
 
 // GET /api/customers?restaurantId=xxx&phone=0612345678
 export async function GET(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   if (restaurantId && phone) {
     // Lookup par tel + resto (appelé par le SIP service à chaque appel)
-    const customer = await ds.getRepository(Customer).findOneBy({
+    const customer = await ds.getRepository<Customer>("customers").findOneBy({
       restaurantId,
       phone,
     });
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   // Liste des clients d'un resto
   if (restaurantId) {
-    const customers = await ds.getRepository(Customer).find({
+    const customers = await ds.getRepository<Customer>("customers").find({
       where: { restaurantId },
       order: { totalOrders: "DESC" },
     });
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Upsert : chercher existant ou créer
-  let customer = await ds.getRepository(Customer).findOneBy({
+  let customer = await ds.getRepository<Customer>("customers").findOneBy({
     restaurantId,
     phone,
   });
@@ -52,14 +52,14 @@ export async function POST(req: NextRequest) {
   if (customer) {
     // Mettre à jour les champs fournis
     Object.assign(customer, data);
-    customer = await ds.getRepository(Customer).save(customer);
+    customer = await ds.getRepository<Customer>("customers").save(customer);
   } else {
-    customer = ds.getRepository(Customer).create({
+    customer = ds.getRepository<Customer>("customers").create({
       restaurantId,
       phone,
       ...data,
     } as Partial<Customer>) as Customer;
-    customer = await ds.getRepository(Customer).save(customer);
+    customer = await ds.getRepository<Customer>("customers").save(customer);
   }
 
   return NextResponse.json(customer);

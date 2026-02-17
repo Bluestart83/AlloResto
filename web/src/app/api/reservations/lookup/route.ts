@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Reservation } from "@/db/entities/Reservation";
+import type { Reservation } from "@/db/entities/Reservation";
 import { MoreThan, In } from "typeorm";
 
 /**
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
 
-  const reservations = await ds.getRepository(Reservation).find({
+  const reservations = await ds.getRepository<Reservation>("reservations").find({
     where: {
       restaurantId,
       customerPhone: phone,

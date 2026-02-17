@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Order } from "@/db/entities/Order";
-import { OrderItem } from "@/db/entities/OrderItem";
-import { Customer } from "@/db/entities/Customer";
-import { Call } from "@/db/entities/Call";
-import { Restaurant } from "@/db/entities/Restaurant";
+import type { Order } from "@/db/entities/Order";
+import type { OrderItem } from "@/db/entities/OrderItem";
+import type { Customer } from "@/db/entities/Customer";
+import type { Call } from "@/db/entities/Call";
+import type { Restaurant } from "@/db/entities/Restaurant";
 import { scheduleOrder } from "@/services/planning-engine.service";
 import { classifyOrderSize } from "@/types/planning";
 import { syncOrderOutbound } from "@/services/sync/workers/outbound-sync.worker";
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const where: any = { restaurantId };
   if (status) where.status = status;
 
-  const orders = await ds.getRepository(Order).find({
+  const orders = await ds.getRepository<Order>("orders").find({
     where,
     relations: ["items", "customer"],
     order: { createdAt: "DESC" },
@@ -61,8 +61,8 @@ export async function POST(req: NextRequest) {
     console.warn("[POST /api/orders] scheduling failed, continuing without:", e);
   }
 
-  const order = ds.getRepository(Order).create(orderData as Partial<Order>) as Order;
-  const savedOrder = await ds.getRepository(Order).save(order) as Order;
+  const order = ds.getRepository<Order>("orders").create(orderData as Partial<Order>) as Order;
+  const savedOrder = await ds.getRepository<Order>("orders").save(order) as Order;
 
   // 2. Créer les lignes de commande (menuItemId déjà résolu par app.py)
   if (items?.length) {
@@ -70,36 +70,36 @@ export async function POST(req: NextRequest) {
       if (item.totalPrice == null) {
         item.totalPrice = (item.unitPrice || 0) * (item.quantity || 1);
       }
-      const orderItem = ds.getRepository(OrderItem).create({
+      const orderItem = ds.getRepository<OrderItem>("order_items").create({
         ...item,
         orderId: savedOrder.id,
       } as Partial<OrderItem>) as OrderItem;
-      await ds.getRepository(OrderItem).save(orderItem);
+      await ds.getRepository<OrderItem>("order_items").save(orderItem);
     }
   }
 
   // 3. Mettre à jour l'appel
   if (orderData.callId) {
-    await ds.getRepository(Call).update(orderData.callId, {
+    await ds.getRepository<Call>("calls").update(orderData.callId, {
       outcome: "order_placed",
     });
   }
 
   // 4. Mettre à jour les stats du client
   if (orderData.customerId) {
-    const customer = await ds.getRepository(Customer).findOneBy({
+    const customer = await ds.getRepository<Customer>("customers").findOneBy({
       id: orderData.customerId,
     });
     if (customer) {
       customer.totalOrders += 1;
       customer.totalSpent = Number(customer.totalSpent) + Number(orderData.total || 0);
       customer.lastOrderAt = new Date();
-      await ds.getRepository(Customer).save(customer);
+      await ds.getRepository<Customer>("customers").save(customer);
     }
   }
 
   // 5. Recharger avec relations
-  const full = await ds.getRepository(Order).findOne({
+  const full = await ds.getRepository<Order>("orders").findOne({
     where: { id: savedOrder.id },
     relations: ["items"],
   });
@@ -131,12 +131,12 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (Object.keys(updates).length > 0) {
-    await ds.getRepository(Order).update(id, updates);
+    await ds.getRepository<Order>("orders").update(id, updates);
   }
 
   // 2. Mise à jour des articles (si fournis)
   if (Array.isArray(itemUpdates)) {
-    const itemRepo = ds.getRepository(OrderItem);
+    const itemRepo = ds.getRepository<OrderItem>("order_items");
 
     for (const item of itemUpdates) {
       if (item._delete && item.id) {
@@ -174,9 +174,9 @@ export async function PATCH(req: NextRequest) {
     if (updates.total === undefined) {
       const freshItems = await itemRepo.find({ where: { orderId: id } });
       const newTotal = freshItems.reduce((sum, it) => sum + Number(it.totalPrice), 0);
-      const order = await ds.getRepository(Order).findOneBy({ id });
+      const order = await ds.getRepository<Order>("orders").findOneBy({ id });
       const deliveryFee = order ? Number(order.deliveryFee) : 0;
-      await ds.getRepository(Order).update(id, { total: newTotal + deliveryFee });
+      await ds.getRepository<Order>("orders").update(id, { total: newTotal + deliveryFee });
     }
   }
 
@@ -184,7 +184,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }
 
-  const updated = await ds.getRepository(Order).findOne({
+  const updated = await ds.getRepository<Order>("orders").findOne({
     where: { id },
     relations: ["items", "customer"],
   });

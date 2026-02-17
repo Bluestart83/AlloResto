@@ -23,7 +23,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkDelivery } from "@/services/delivery.service";
 import { AppDataSource } from "@/db/data-source";
-import { Restaurant } from "@/db/entities/Restaurant";
+import type { Restaurant } from "@/db/entities/Restaurant";
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       if (!ds.isInitialized) await ds.initialize();
 
       const restaurant = await ds
-        .getRepository(Restaurant)
+        .getRepository<Restaurant>("restaurants")
         .findOneBy({ id: body.restaurantId });
 
       if (!restaurant) {

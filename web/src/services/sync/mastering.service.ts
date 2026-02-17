@@ -5,7 +5,7 @@
  * et résout les conflits entre données locales et distantes.
  */
 import { getDb } from "@/lib/db";
-import { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
+import type { SyncPlatformConfig } from "@/db/entities/SyncPlatformConfig";
 import type { Reservation } from "@/db/entities/Reservation";
 
 const PLATFORM_SOURCES = [
@@ -31,7 +31,7 @@ export interface ConflictResolution {
  */
 export async function getMaster(restaurantId: string, entityType: string): Promise<string> {
   const db = await getDb();
-  const configRepo = db.getRepository(SyncPlatformConfig);
+  const configRepo = db.getRepository<SyncPlatformConfig>("sync_platform_configs");
 
   const configs = await configRepo.find({
     where: { restaurantId, isActive: true },

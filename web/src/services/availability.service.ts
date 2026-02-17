@@ -8,10 +8,10 @@
  */
 
 import { AppDataSource } from "@/db/data-source";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { Reservation } from "@/db/entities/Reservation";
-import { DiningTable } from "@/db/entities/DiningTable";
-import { DiningService } from "@/db/entities/DiningService";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { Reservation } from "@/db/entities/Reservation";
+import type { DiningTable } from "@/db/entities/DiningTable";
+import type { DiningService } from "@/db/entities/DiningService";
 import { checkDelivery } from "./delivery.service";
 
 // ============================================================
@@ -94,7 +94,7 @@ export async function checkAvailability(
   if (!ds.isInitialized) await ds.initialize();
 
   const restaurant = await ds
-    .getRepository(Restaurant)
+    .getRepository<Restaurant>("restaurants")
     .findOneBy({ id: params.restaurantId });
 
   if (!restaurant) {
@@ -283,7 +283,7 @@ export async function checkAvailability(
     const dayOfWeek = reservationTime.getDay() === 0 ? 7 : reservationTime.getDay(); // 1=Lun..7=Dim
     const reqHHMM = formatHHMM(reservationTime);
     const allServices = await ds
-      .getRepository(DiningService)
+      .getRepository<DiningService>("dining_services")
       .find({ where: { restaurantId: params.restaurantId, isActive: true } });
 
     const matchingService = allServices.find((svc) => {
@@ -302,7 +302,7 @@ export async function checkAvailability(
       totalSeats = matchingService.maxCovers;
     } else {
       const activeTables = await ds
-        .getRepository(DiningTable)
+        .getRepository<DiningTable>("dining_tables")
         .find({ where: { restaurantId: params.restaurantId, isActive: true } });
       totalSeats =
         activeTables.length > 0
@@ -312,7 +312,7 @@ export async function checkAvailability(
 
     // Compter les places occupées sur le créneau
     const overlapping = await ds
-      .getRepository(Reservation)
+      .getRepository<Reservation>("reservations")
       .createQueryBuilder("r")
       .where("r.restaurant_id = :rid", { rid: params.restaurantId })
       .andWhere("r.status IN (:...statuses)", {

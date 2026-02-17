@@ -6,7 +6,7 @@
  */
 
 import { getDb } from "@/lib/db";
-import { PricingConfig } from "@/db/entities/PricingConfig";
+import type { PricingConfig } from "@/db/entities/PricingConfig";
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const FRANKFURTER_URL = "https://api.frankfurter.app/latest?from=USD";
@@ -18,7 +18,7 @@ const FRANKFURTER_URL = "https://api.frankfurter.app/latest?from=USD";
  */
 export async function getExchangeRates(): Promise<Record<string, number>> {
   const ds = await getDb();
-  const repo = ds.getRepository(PricingConfig);
+  const repo = ds.getRepository<PricingConfig>("pricing_config");
   let config = await repo.findOne({ where: {} });
 
   if (!config) {

@@ -619,6 +619,9 @@ export async function fetchMenuPhotos(
 // ============================================================
 
 import OpenAI from "openai";
+import type { Restaurant } from "../db/entities/Restaurant";
+import type { MenuCategory as MenuCategoryEntity } from "../db/entities/MenuCategory";
+import type { MenuItem as MenuItemEntity } from "../db/entities/MenuItem";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -1118,15 +1121,13 @@ export async function importRestaurant(sources: ImportSource[]): Promise<ImportR
  */
 export async function persistImport(data: ImportResult): Promise<string> {
   const { getDb } = await import("../lib/db");
-  const { Restaurant } = await import("../db/entities/Restaurant");
-  const { MenuCategory: MenuCategoryEntity } = await import("../db/entities/MenuCategory");
-  const { MenuItem: MenuItemEntity } = await import("../db/entities/MenuItem");
+  // Dynamic imports removed — getRepository uses table name strings now
 
   const ds = await getDb();
   const r = data.restaurant;
 
   // 1. Créer le restaurant
-  const restaurant = ds.getRepository(Restaurant).create({
+  const restaurant = ds.getRepository<Restaurant>("restaurants").create({
     name: r.name,
     cuisineType: r.cuisine_type || "other",
     description: r.description || null,
@@ -1155,7 +1156,7 @@ export async function persistImport(data: ImportResult): Promise<string> {
     serpApiPhotosRaw: data._import_metadata?.serpapi_photos_raw || null,
   });
 
-  const savedRestaurant = await ds.getRepository(Restaurant).save(restaurant);
+  const savedRestaurant = await ds.getRepository<Restaurant>("restaurants").save(restaurant);
 
   // 2. Créer les catégories par défaut + celles de l'IA (mapping ref → id)
   const categoryMap: Record<string, string> = {};
@@ -1171,23 +1172,23 @@ export async function persistImport(data: ImportResult): Promise<string> {
   for (const def of DEFAULT_CATEGORIES) {
     const norm = def.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
     if (aiCatNorm.has(norm)) continue; // l'IA a sa propre version, on la créera juste après
-    const entity = ds.getRepository(MenuCategoryEntity).create({
+    const entity = ds.getRepository<MenuCategoryEntity>("menu_categories").create({
       restaurantId: savedRestaurant.id,
       name: def.name,
       displayOrder: def.display_order,
     } as any) as unknown as InstanceType<typeof MenuCategoryEntity>;
-    const saved = await ds.getRepository(MenuCategoryEntity).save(entity) as unknown as InstanceType<typeof MenuCategoryEntity>;
+    const saved = await ds.getRepository<MenuCategoryEntity>("menu_categories").save(entity) as unknown as InstanceType<typeof MenuCategoryEntity>;
     categoryMap[def.ref] = saved.id;
   }
 
   // Créer les catégories de l'IA
   for (const cat of data.menu.categories) {
-    const entity = ds.getRepository(MenuCategoryEntity).create({
+    const entity = ds.getRepository<MenuCategoryEntity>("menu_categories").create({
       restaurantId: savedRestaurant.id,
       name: cat.name,
       displayOrder: cat.display_order,
     } as any) as unknown as InstanceType<typeof MenuCategoryEntity>;
-    const saved = await ds.getRepository(MenuCategoryEntity).save(entity) as unknown as InstanceType<typeof MenuCategoryEntity>;
+    const saved = await ds.getRepository<MenuCategoryEntity>("menu_categories").save(entity) as unknown as InstanceType<typeof MenuCategoryEntity>;
     categoryMap[cat.ref] = saved.id;
   }
 
@@ -1196,7 +1197,7 @@ export async function persistImport(data: ImportResult): Promise<string> {
 
   for (const item of data.menu.items) {
     if (isFormule(item)) continue; // on fait les formules après
-    const entity = ds.getRepository(MenuItemEntity).create({
+    const entity = ds.getRepository<MenuItemEntity>("menu_items").create({
       restaurantId: savedRestaurant.id,
       categoryId: categoryMap[item.category_ref] || null,
       name: item.name,
@@ -1208,7 +1209,7 @@ export async function persistImport(data: ImportResult): Promise<string> {
       isAvailable: item.available,
       options: item.options,
     } as any) as unknown as InstanceType<typeof MenuItemEntity>;
-    const saved = await ds.getRepository(MenuItemEntity).save(entity) as unknown as InstanceType<typeof MenuItemEntity>;
+    const saved = await ds.getRepository<MenuItemEntity>("menu_items").save(entity) as unknown as InstanceType<typeof MenuItemEntity>;
     itemRefMap[item.ref] = saved.id;
   }
 
@@ -1248,7 +1249,7 @@ export async function persistImport(data: ImportResult): Promise<string> {
       return opt;
     });
 
-    const entity = ds.getRepository(MenuItemEntity).create({
+    const entity = ds.getRepository<MenuItemEntity>("menu_items").create({
       restaurantId: savedRestaurant.id,
       categoryId: null, // formules n'ont pas de catégorie
       name: item.name,
@@ -1260,7 +1261,7 @@ export async function persistImport(data: ImportResult): Promise<string> {
       isAvailable: item.available,
       options: resolvedOptions,
     } as any);
-    await ds.getRepository(MenuItemEntity).save(entity);
+    await ds.getRepository<MenuItemEntity>("menu_items").save(entity);
   }
 
   return savedRestaurant.id;

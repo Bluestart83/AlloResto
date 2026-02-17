@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Order } from "@/db/entities/Order";
+import type { Order } from "@/db/entities/Order";
 
 const CANCELLABLE_STATUSES = ["pending", "confirmed"];
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   // Find order by number + restaurant + phone
   const phone = caller_phone || "";
-  const orders = await ds.getRepository(Order).find({
+  const orders = await ds.getRepository<Order>("orders").find({
     where: { restaurantId, customerPhone: phone },
     order: { createdAt: "DESC" },
     take: 20,
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  await ds.getRepository(Order).update(target.id, { status: "cancelled" });
+  await ds.getRepository<Order>("orders").update(target.id, { status: "cancelled" });
 
   return NextResponse.json({
     success: true,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AppDataSource } from "@/db/data-source";
-import { Message } from "@/db/entities/Message";
+import type { Message } from "@/db/entities/Message";
 
 async function getDs() {
   const ds = AppDataSource;
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     }
 
     const qb = ds
-      .getRepository(Message)
+      .getRepository<Message>("messages")
       .createQueryBuilder("m")
       .where("m.restaurant_id = :rid", { rid: restaurantId })
       .orderBy("m.created_at", "DESC");
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const repo = ds.getRepository(Message);
+    const repo = ds.getRepository<Message>("messages");
     const message = repo.create({
       restaurantId: body.restaurantId,
       callId: body.callId || null,
@@ -78,8 +78,8 @@ export async function PATCH(req: NextRequest) {
     if (body.isRead !== undefined) updates.isRead = body.isRead;
     if (body.isUrgent !== undefined) updates.isUrgent = body.isUrgent;
 
-    await ds.getRepository(Message).update(body.id, updates);
-    const updated = await ds.getRepository(Message).findOneBy({ id: body.id });
+    await ds.getRepository<Message>("messages").update(body.id, updates);
+    const updated = await ds.getRepository<Message>("messages").findOneBy({ id: body.id });
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -95,7 +95,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
 
-    await ds.getRepository(Message).delete(id);
+    await ds.getRepository<Message>("messages").delete(id);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

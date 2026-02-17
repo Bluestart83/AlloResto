@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Reservation } from "@/db/entities/Reservation";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { DiningService } from "@/db/entities/DiningService";
+import type { Reservation } from "@/db/entities/Reservation";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { DiningService } from "@/db/entities/DiningService";
 import { syncReservationOutbound } from "@/services/sync/workers/outbound-sync.worker";
 
 // GET /api/reservations?restaurantId=X&date=YYYY-MM-DD&status=pending,confirmed
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
 
     const qb = ds
-      .getRepository(Reservation)
+      .getRepository<Reservation>("reservations")
       .createQueryBuilder("r")
       .where("r.restaurant_id = :rid", { rid: restaurantId })
       .orderBy("r.reservation_time", "ASC");
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     // Charger le restaurant pour calculer endTime
     const restaurant = await ds
-      .getRepository(Restaurant)
+      .getRepository<Restaurant>("restaurants")
       .findOneBy({ id: body.restaurantId });
 
     if (!restaurant) {
@@ -83,13 +83,13 @@ export async function POST(req: NextRequest) {
     // Durée : service > body > restaurant fallback
     let durationMin = restaurant.avgMealDurationMin;
     if (body.serviceId) {
-      const svc = await ds.getRepository(DiningService).findOneBy({ id: body.serviceId });
+      const svc = await ds.getRepository<DiningService>("dining_services").findOneBy({ id: body.serviceId });
       if (svc) durationMin = svc.defaultDurationMin;
     }
     if (body.durationMin) durationMin = body.durationMin;
     const endTime = new Date(reservationTime.getTime() + durationMin * 60000);
 
-    const repo = ds.getRepository(Reservation);
+    const repo = ds.getRepository<Reservation>("reservations");
     const reservation = repo.create({
       restaurantId: body.restaurantId,
       callId: body.callId || null,
@@ -149,10 +149,10 @@ export async function PATCH(req: NextRequest) {
     if (body.diningRoomId !== undefined) updates.diningRoomId = body.diningRoomId || null;
     if (body.tableIds !== undefined) updates.tableIds = body.tableIds || null;
 
-    await ds.getRepository(Reservation).update(id, updates);
+    await ds.getRepository<Reservation>("reservations").update(id, updates);
 
     const updated = await ds
-      .getRepository(Reservation)
+      .getRepository<Reservation>("reservations")
       .findOneBy({ id });
 
     // Sync outbound (fire-and-forget, le worker gère le mastering)

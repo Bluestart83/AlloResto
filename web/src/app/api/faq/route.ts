@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Faq } from "@/db/entities/Faq";
+import type { Faq } from "@/db/entities/Faq";
 
 // ============================================================
 // GET
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   // Mode prompt : uniquement les FAQs avec réponse (pour injection dans le system prompt)
   if (forPrompt === "true") {
-    const faqs = await ds.getRepository(Faq).find({
+    const faqs = await ds.getRepository<Faq>("faqs").find({
       where: { restaurantId, status: "answered" },
       order: { askCount: "DESC" },
     });
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   const where: any = { restaurantId };
   if (status) where.status = status;
 
-  const faqs = await ds.getRepository(Faq).find({
+  const faqs = await ds.getRepository<Faq>("faqs").find({
     where,
     order: { askCount: "DESC", updatedAt: "DESC" },
   });
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Vérifier si l'IA a déjà remonté cette question exacte (double appel possible)
-  const existing = await ds.getRepository(Faq).findOneBy({
+  const existing = await ds.getRepository<Faq>("faqs").findOneBy({
     restaurantId,
     question,
   });
@@ -90,11 +90,11 @@ export async function POST(req: NextRequest) {
     existing.askCount += 1;
     existing.lastAskedAt = new Date();
     existing.lastCallerPhone = callerPhone || existing.lastCallerPhone;
-    const updated = await ds.getRepository(Faq).save(existing);
+    const updated = await ds.getRepository<Faq>("faqs").save(existing);
     return NextResponse.json(updated);
   }
 
-  const faq = ds.getRepository(Faq).create({
+  const faq = ds.getRepository<Faq>("faqs").create({
     restaurantId,
     question,
     category: category || "other",
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     lastAskedAt: new Date(),
   } as Partial<Faq>) as Faq;
 
-  const saved = await ds.getRepository(Faq).save(faq);
+  const saved = await ds.getRepository<Faq>("faqs").save(faq);
   return NextResponse.json(saved, { status: 201 });
 }
 
@@ -124,7 +124,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  const faq = await ds.getRepository(Faq).findOneBy({ id });
+  const faq = await ds.getRepository<Faq>("faqs").findOneBy({ id });
   if (!faq) {
     return NextResponse.json({ error: "FAQ not found" }, { status: 404 });
   }
@@ -138,7 +138,7 @@ export async function PATCH(req: NextRequest) {
     faq.status = status;
   }
 
-  const updated = await ds.getRepository(Faq).save(faq);
+  const updated = await ds.getRepository<Faq>("faqs").save(faq);
   return NextResponse.json(updated);
 }
 
@@ -154,6 +154,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  await ds.getRepository(Faq).delete(id);
+  await ds.getRepository<Faq>("faqs").delete(id);
   return NextResponse.json({ success: true });
 }

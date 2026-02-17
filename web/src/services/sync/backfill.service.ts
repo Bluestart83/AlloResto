@@ -9,11 +9,11 @@
  *   await runBackfill();
  */
 import { getDb } from "@/lib/db";
-import { Reservation } from "@/db/entities/Reservation";
-import { Order } from "@/db/entities/Order";
-import { DiningTable } from "@/db/entities/DiningTable";
-import { Restaurant } from "@/db/entities/Restaurant";
-import { DiningService } from "@/db/entities/DiningService";
+import type { Reservation } from "@/db/entities/Reservation";
+import type { Order } from "@/db/entities/Order";
+import type { DiningTable } from "@/db/entities/DiningTable";
+import type { Restaurant } from "@/db/entities/Restaurant";
+import type { DiningService } from "@/db/entities/DiningService";
 
 // ---------------------------------------------------------------------------
 // 4.1 + 4.2  Reservations & Orders : source field
@@ -25,16 +25,14 @@ async function backfillReservationSources(): Promise<number> {
   // Réservations créées via un appel → phone_ai
   const r1 = await db
     .createQueryBuilder()
-    .update(Reservation)
-    .set({ source: "phone_ai" })
+    .update("reservations", { source: "phone_ai" })
     .where("callId IS NOT NULL AND source = :src", { src: "phone_ai" })
     .execute();
 
   // Réservations sans appel (saisie manuelle / walk-in)
   const r2 = await db
     .createQueryBuilder()
-    .update(Reservation)
-    .set({ source: "walkin" })
+    .update("reservations", { source: "walkin" })
     .where("callId IS NULL AND source = :src", { src: "phone_ai" })
     .execute();
 
@@ -46,15 +44,13 @@ async function backfillOrderSources(): Promise<number> {
 
   const r1 = await db
     .createQueryBuilder()
-    .update(Order)
-    .set({ source: "phone_ai" })
+    .update("orders", { source: "phone_ai" })
     .where("callId IS NOT NULL AND source = :src", { src: "phone_ai" })
     .execute();
 
   const r2 = await db
     .createQueryBuilder()
-    .update(Order)
-    .set({ source: "walkin" })
+    .update("orders", { source: "walkin" })
     .where("callId IS NULL AND source = :src", { src: "phone_ai" })
     .execute();
 
@@ -70,8 +66,7 @@ async function backfillTableMaxSeats(): Promise<number> {
 
   const r = await db
     .createQueryBuilder()
-    .update(DiningTable)
-    .set({ maxSeats: () => "seats" })
+    .update("dining_tables", { maxSeats: () => "seats" })
     .where("maxSeats IS NULL")
     .execute();
 
@@ -92,8 +87,8 @@ function subtractMinutes(time: string, minutes: number): string {
 
 async function backfillServicesFromOpeningHours(): Promise<number> {
   const db = await getDb();
-  const restaurantRepo = db.getRepository(Restaurant);
-  const serviceRepo = db.getRepository(DiningService);
+  const restaurantRepo = db.getRepository<Restaurant>("restaurants");
+  const serviceRepo = db.getRepository<DiningService>("dining_services");
 
   const restaurants = await restaurantRepo.find();
   let created = 0;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { Order } from "@/db/entities/Order";
+import type { Order } from "@/db/entities/Order";
 import { MoreThan } from "typeorm";
 
 /**
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   // Chercher les commandes des dernières 24h pour ce téléphone
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const orders = await ds.getRepository(Order).find({
+  const orders = await ds.getRepository<Order>("orders").find({
     where: {
       restaurantId,
       customerPhone: phone,
