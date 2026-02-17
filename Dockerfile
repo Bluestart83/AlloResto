@@ -2,16 +2,16 @@ FROM node:24-slim
 
 WORKDIR /app
 
-# billing-ui source (copied into AlloResto/packages/ by prod.sh)
-COPY packages/billing-ui ./packages/billing-ui
-
-# Install deps (strip billing-ui — handled manually)
+# Install deps (strip billing-ui — resolved via alias, not npm)
 COPY web/package.json web/package-lock.json* ./
 RUN sed -i '/"@nld\/billing-ui"/d' package.json
 RUN npm install
 
 # Copy source
 COPY web/ .
+
+# billing-ui source AFTER web copy (copied into AlloResto/packages/ by prod.sh)
+COPY packages/billing-ui ./packages/billing-ui
 
 # Debug: verify billing-ui exists before build (remove after confirmed working)
 RUN ls -la packages/billing-ui/src/index.ts
