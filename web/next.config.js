@@ -6,7 +6,7 @@ const nextConfig = {
   serverExternalPackages: ["typeorm", "better-sqlite3"],
   turbopack: {
     resolveAlias: {
-      "@nld/billing-ui": "./node_modules/@nld/billing-ui/src/index.ts",
+      "@nld/billing-ui": "./packages/billing-ui/src/index.ts",
     },
   },
   async rewrites() {
