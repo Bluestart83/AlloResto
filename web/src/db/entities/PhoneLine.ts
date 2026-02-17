@@ -26,8 +26,11 @@ export class PhoneLine {
   @Column({ type: "varchar", length: 50, default: "twilio" })
   provider!: string;
 
-  // --- Credentials SIP propres au client ---
+  // --- Config SIP propre au client ---
   // Si null → fallback sur .env (ligne de démo)
+  @Column({ name: "sip_transport", type: "varchar", length: 10, nullable: true })
+  sipTransport!: string | null;  // "udp" | "tcp" | "tls" — null = default (udp)
+
   @Column({ name: "sip_domain", type: "varchar", length: 255, nullable: true })
   sipDomain!: string | null;
 

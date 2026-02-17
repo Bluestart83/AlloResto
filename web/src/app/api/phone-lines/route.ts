@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
           id: phoneLine.id,
           phoneNumber: phoneLine.phoneNumber,
           provider: phoneLine.provider,
+          sipTransport: phoneLine.sipTransport,
           sipDomain: phoneLine.sipDomain,
           sipUsername: phoneLine.sipUsername,
           hasSipPassword: !!phoneLine.sipPassword,
@@ -51,6 +52,7 @@ export async function PUT(req: NextRequest) {
     restaurantId,
     phoneNumber,
     provider,
+    sipTransport,
     sipDomain,
     sipUsername,
     sipPassword,
@@ -58,6 +60,7 @@ export async function PUT(req: NextRequest) {
     isActive,
     sipEnabled,
     sipBridge,
+    maxCallDurationSec,
   } = body;
 
   if (!restaurantId || !phoneNumber) {
@@ -69,10 +72,11 @@ export async function PUT(req: NextRequest) {
 
   const ds = await getDb();
 
-  // Update sipEnabled + sipBridge on restaurant
-  const restaurantUpdate: Record<string, boolean> = {};
+  // Update sipEnabled + sipBridge + maxCallDurationSec on restaurant
+  const restaurantUpdate: Record<string, any> = {};
   if (sipEnabled !== undefined) restaurantUpdate.sipEnabled = !!sipEnabled;
   if (sipBridge !== undefined) restaurantUpdate.sipBridge = !!sipBridge;
+  if (maxCallDurationSec !== undefined) restaurantUpdate.maxCallDurationSec = maxCallDurationSec;
   if (Object.keys(restaurantUpdate).length > 0) {
     await ds.getRepository(Restaurant).update(restaurantId, restaurantUpdate);
   }
@@ -91,6 +95,7 @@ export async function PUT(req: NextRequest) {
 
   phoneLine.phoneNumber = phoneNumber;
   if (provider !== undefined) phoneLine.provider = provider;
+  if (sipTransport !== undefined) phoneLine.sipTransport = sipTransport || null;
   if (sipDomain !== undefined) phoneLine.sipDomain = sipDomain || null;
   if (sipUsername !== undefined) phoneLine.sipUsername = sipUsername || null;
   if (twilioTrunkSid !== undefined) phoneLine.twilioTrunkSid = twilioTrunkSid || null;
@@ -109,9 +114,11 @@ export async function PUT(req: NextRequest) {
   const restaurant = await ds.getRepository(Restaurant).findOneBy({ id: restaurantId });
   if (restaurant?.agentId) {
     const agentUpdates: Record<string, string | boolean> = {};
+    if (sipTransport !== undefined) agentUpdates.sipTransport = sipTransport || "";
     if (sipDomain !== undefined) agentUpdates.sipDomain = sipDomain || "";
     if (sipUsername !== undefined) agentUpdates.sipUsername = sipUsername || "";
     if (sipPassword) agentUpdates.sipPassword = sipPassword;
+    if (maxCallDurationSec !== undefined) (agentUpdates as any).maxCallDurationSec = maxCallDurationSec;
     // Sync activation state: sipEnabled toggles agent isActive
     if (sipEnabled !== undefined) agentUpdates.isActive = !!sipEnabled;
     if (Object.keys(agentUpdates).length > 0) {

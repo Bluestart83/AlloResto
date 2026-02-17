@@ -202,6 +202,9 @@ export class Restaurant {
   @Column({ name: "max_parallel_calls", type: "int", default: 10 })
   maxParallelCalls!: number;
 
+  @Column({ name: "max_call_duration_sec", type: "int", default: 600 })
+  maxCallDurationSec!: number;
+
   /**
    * AI cost margin % for this restaurant (null = use global default from PricingConfig).
    */

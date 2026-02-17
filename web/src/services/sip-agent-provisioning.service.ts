@@ -118,7 +118,9 @@ export async function provisionAgent(restaurant: {
   transferEnabled?: boolean;
   transferPhoneNumber?: string | null;
   transferAutomatic?: boolean;
+  maxCallDurationSec?: number;
   sip?: {
+    transport?: string;
     domain: string;
     username: string;
     password: string;
@@ -147,7 +149,7 @@ export async function provisionAgent(restaurant: {
         transportType: "sip_bridge",
         timezone: restaurant.timezone || "Europe/Paris",
         apiBaseUrl: ALLORESTO_URL,
-        maxCallDurationSec: 600,
+        maxCallDurationSec: restaurant.maxCallDurationSec || 600,
         onCallEndWebhook: `={{BASE_URL}}/api/calls`,
         externalSessionUrl: `=${ALLORESTO_URL}/api/ai?restaurantId={{config.restaurantId}}&callerPhone={{callerPhone}}`,
         config: {
@@ -157,6 +159,7 @@ export async function provisionAgent(restaurant: {
           orderStatusEnabled: restaurant.orderStatusEnabled ?? true,
           transferEnabled: !!(restaurant.transferEnabled && restaurant.transferPhoneNumber && !restaurant.transferAutomatic),
         },
+        sipTransport: restaurant.sip?.transport || null,
         sipDomain: restaurant.sip?.domain || null,
         sipUsername: restaurant.sip?.username || null,
         sipPassword: restaurant.sip?.password || null,

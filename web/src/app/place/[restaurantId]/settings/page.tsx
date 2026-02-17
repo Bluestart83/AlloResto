@@ -177,6 +177,7 @@ export default function SettingsPage() {
   const [sipBridge, setSipBridge] = useState(false);
   const [sipPhoneNumber, setSipPhoneNumber] = useState("");
   const [sipProvider, setSipProvider] = useState("twilio");
+  const [sipTransport, setSipTransport] = useState("");
   const [sipDomain, setSipDomain] = useState("");
   const [sipUsername, setSipUsername] = useState("");
   const [sipPassword, setSipPassword] = useState("");
@@ -205,6 +206,7 @@ export default function SettingsPage() {
         if (phoneData.phoneLine) {
           setSipPhoneNumber(phoneData.phoneLine.phoneNumber || "");
           setSipProvider(phoneData.phoneLine.provider || "twilio");
+          setSipTransport(phoneData.phoneLine.sipTransport || "");
           setSipDomain(phoneData.phoneLine.sipDomain || "");
           setSipUsername(phoneData.phoneLine.sipUsername || "");
           setSipTwilioTrunkSid(phoneData.phoneLine.twilioTrunkSid || "");
@@ -255,11 +257,13 @@ export default function SettingsPage() {
           sipBridge,
           phoneNumber: sipPhoneNumber,
           provider: sipBridge ? "sip" : "twilio",
+          sipTransport: sipBridge ? sipTransport || null : null,
           sipDomain: sipBridge ? sipDomain : null,
           sipUsername: sipBridge ? sipUsername : null,
           sipPassword: sipBridge && sipPassword ? sipPassword : undefined,
           twilioTrunkSid: !sipBridge ? sipTwilioTrunkSid : null,
           isActive: sipIsActive,
+          maxCallDurationSec: data.maxCallDurationSec,
         }),
       });
       if (res.ok) {
@@ -852,6 +856,15 @@ export default function SettingsPage() {
 
                 {sipBridge ? (
                   <>
+                    <div className="col-md-3">
+                      <label className="form-label">Transport</label>
+                      <select className="form-select" value={sipTransport} onChange={(e) => setSipTransport(e.target.value)}>
+                        <option value="">UDP (defaut)</option>
+                        <option value="udp">UDP</option>
+                        <option value="tcp">TCP</option>
+                        <option value="tls">TLS</option>
+                      </select>
+                    </div>
                     <div className="col-md-6">
                       <label className="form-label">Domaine SIP</label>
                       <input className="form-control" value={sipDomain} onChange={(e) => setSipDomain(e.target.value)} placeholder="Ex: sip.ovh.fr" />
@@ -876,7 +889,7 @@ export default function SettingsPage() {
                 )}
 
                 {/* Appels simultanés max */}
-                <div className="col-md-6">
+                <div className="col-md-3">
                   <label className="form-label">Appels simultanes max</label>
                   <input
                     className="form-control"
@@ -886,9 +899,19 @@ export default function SettingsPage() {
                     value={data.maxParallelCalls}
                     onChange={(e) => update("maxParallelCalls", parseInt(e.target.value) || 10)}
                   />
-                  <div className="form-text">
-                    Nombre maximum d'appels en parallele (au-dela : signal occupe).
-                  </div>
+                  <div className="form-text">Au-dela : signal occupe.</div>
+                </div>
+                <div className="col-md-3">
+                  <label className="form-label">Duree max appel (sec)</label>
+                  <input
+                    className="form-control"
+                    type="number"
+                    min={60}
+                    max={3600}
+                    value={data.maxCallDurationSec}
+                    onChange={(e) => update("maxCallDurationSec", parseInt(e.target.value) || 600)}
+                  />
+                  <div className="form-text">0 = illimite.</div>
                 </div>
               </div>
             </>
