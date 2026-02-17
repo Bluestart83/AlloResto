@@ -3,18 +3,19 @@ RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt
 
 WORKDIR /app
 
-# billing-ui (copied into AlloResto/packages/ by prod.sh before build)
+# billing-ui source (copied into AlloResto/packages/ by prod.sh)
 COPY packages/billing-ui ./packages/billing-ui
 
-# Install deps (strip workspace dep, re-add as file:)
+# Install deps (strip billing-ui — handled manually)
 COPY web/package.json web/package-lock.json* ./
-RUN sed -i 's|"@nld/billing-ui": "[^"]*"|"@nld/billing-ui": "file:./packages/billing-ui"|' package.json
-RUN npm install --install-links
+RUN sed -i '/"@nld\/billing-ui"/d' package.json
+RUN npm install
 
-# Copy source (overwrites package.json) then re-patch + re-install billing-ui
+# Copy source
 COPY web/ .
-RUN sed -i 's|"@nld/billing-ui": "[^"]*"|"@nld/billing-ui": "file:./packages/billing-ui"|' package.json
-RUN npm install --install-links
+
+# Place billing-ui in node_modules (resolved via turbopack.resolveAlias in next.config.js)
+RUN mkdir -p node_modules/@nld && cp -r packages/billing-ui node_modules/@nld/billing-ui
 
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
 ENV GOOGLE_MAPS_API_KEY=build-placeholder
