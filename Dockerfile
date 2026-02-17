@@ -13,13 +13,10 @@ RUN npm install
 # Copy source
 COPY web/ .
 
-# Also place in node_modules as fallback (primary resolution via webpack alias in next.config.js)
-RUN mkdir -p node_modules/@nld && cp -r packages/billing-ui node_modules/@nld/billing-ui
-
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
 ENV GOOGLE_MAPS_API_KEY=build-placeholder
 
-RUN npx next build --webpack
+RUN npx next build
 
 EXPOSE 3000
 CMD ["npm", "start"]
