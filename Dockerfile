@@ -19,7 +19,8 @@ RUN mkdir -p node_modules/@nld && cp -r packages/billing-ui node_modules/@nld/bi
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
 ENV GOOGLE_MAPS_API_KEY=build-placeholder
 
-RUN npx next build --no-turbopack
+ENV TURBOPACK=0
+RUN npm run build
 
 EXPOSE 3000
 CMD ["npm", "start"]
