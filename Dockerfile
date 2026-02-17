@@ -13,10 +13,13 @@ RUN npm install
 # Copy source
 COPY web/ .
 
+# Debug: verify billing-ui exists before build (remove after confirmed working)
+RUN ls -la packages/billing-ui/src/index.ts
+
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
 ENV GOOGLE_MAPS_API_KEY=build-placeholder
 
-RUN npx next build --webpack
+RUN npx next build
 
 EXPOSE 3000
 CMD ["npm", "start"]
