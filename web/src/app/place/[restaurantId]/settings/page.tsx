@@ -148,6 +148,10 @@ interface RestaurantData {
   transferCases: string | null;
   maxParallelCalls: number;
   maxCallDurationSec: number;
+  chatEnabled: boolean;
+  chatMode: string;
+  chatTitle: string | null;
+  chatOpenOnLoad: boolean;
 }
 
 interface PhoneLineData {
@@ -674,6 +678,49 @@ export default function SettingsPage() {
                 Permet aux clients de demander le statut de leur commande en cours lors d&apos;un appel.
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Chat Widget ── */}
+      <div className="card mb-4">
+        <div className="card-header"><i className="bi bi-chat-dots me-2"></i>Chat Widget</div>
+        <div className="card-body">
+          <div className="row g-3">
+            <div className="col-12">
+              <div className="form-check form-switch">
+                <input className="form-check-input" type="checkbox" checked={data.chatEnabled} onChange={(e) => update("chatEnabled", e.target.checked)} />
+                <label className="form-check-label">Activer le chat sur le site</label>
+              </div>
+            </div>
+            {data.chatEnabled && (
+              <>
+                <div className="col-md-4">
+                  <label className="form-label">Mode</label>
+                  <select className="form-select" value={data.chatMode} onChange={(e) => update("chatMode", e.target.value)}>
+                    <option value="text">Texte uniquement</option>
+                    <option value="stt_tts">Texte + Voix navigateur (STT/TTS)</option>
+                    <option value="realtime">Conversation vocale temps réel</option>
+                  </select>
+                  <div className="form-text">
+                    {data.chatMode === "text" && "Chat texte classique — le plus économique."}
+                    {data.chatMode === "stt_tts" && "Micro dictée + lecture vocale des réponses. Même coût serveur que le texte."}
+                    {data.chatMode === "realtime" && "Conversation vocale via OpenAI Realtime API — coût élevé, qualité premium."}
+                  </div>
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label">Titre du chat</label>
+                  <input className="form-control" value={data.chatTitle || ""} onChange={(e) => update("chatTitle", e.target.value || null)} placeholder={data.name} />
+                  <div className="form-text">Affiché dans le header du widget. Vide = nom du restaurant.</div>
+                </div>
+                <div className="col-12">
+                  <div className="form-check form-switch">
+                    <input className="form-check-input" type="checkbox" checked={data.chatOpenOnLoad} onChange={(e) => update("chatOpenOnLoad", e.target.checked)} />
+                    <label className="form-check-label">Ouvrir automatiquement au chargement de la page</label>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
   // Auto-provision agent + FinalCustomer dans sip-agent-server
   const sip = await loadSipCreds(saved.id);
-  const { agentId, finalCustomerId } = await provisionAgent({
+  const { agentId, agentApiToken, finalCustomerId } = await provisionAgent({
     id: saved.id,
     name: saved.name,
     aiVoice: saved.aiVoice,
@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
   });
   if (agentId || finalCustomerId) {
     if (agentId) saved.agentId = agentId;
+    if (agentApiToken) saved.agentApiToken = agentApiToken;
     if (finalCustomerId) saved.finalCustomerId = finalCustomerId;
     await ds.getRepository<Restaurant>("restaurants").save(saved);
   }
@@ -97,15 +98,19 @@ export async function PATCH(req: NextRequest) {
   const oldName = restaurant.name;
   const oldVoice = restaurant.aiVoice;
   const oldTimezone = restaurant.timezone;
+  const oldChatEnabled = restaurant.chatEnabled;
+  const oldChatMode = restaurant.chatMode;
+  const oldChatTitle = restaurant.chatTitle;
+  const oldChatOpenOnLoad = restaurant.chatOpenOnLoad;
   const hadAgent = !!restaurant.agentId;
 
   Object.assign(restaurant, updates);
   const saved = await ds.getRepository<Restaurant>("restaurants").save(restaurant);
 
-  // Pas encore d'agent → provisionner si sipEnabled
-  if (!hadAgent && !saved.agentId && saved.sipEnabled) {
+  // Pas encore d'agent → provisionner si sipEnabled OU chatEnabled
+  if (!hadAgent && !saved.agentId && (saved.sipEnabled || saved.chatEnabled)) {
     const sip = await loadSipCreds(saved.id);
-    const { agentId, finalCustomerId } = await provisionAgent({
+    const { agentId, agentApiToken, finalCustomerId } = await provisionAgent({
       id: saved.id,
       name: saved.name,
       aiVoice: saved.aiVoice,
@@ -118,20 +123,31 @@ export async function PATCH(req: NextRequest) {
       transferEnabled: saved.transferEnabled,
       transferPhoneNumber: saved.transferPhoneNumber,
       transferAutomatic: saved.transferAutomatic,
+      chatEnabled: saved.chatEnabled,
+      chatMode: saved.chatMode,
+      chatTitle: saved.chatTitle || saved.name,
+      chatOpenOnLoad: saved.chatOpenOnLoad,
       sip,
     });
     if (agentId || finalCustomerId) {
       if (agentId) saved.agentId = agentId;
+      if (agentApiToken) saved.agentApiToken = agentApiToken;
       if (finalCustomerId) saved.finalCustomerId = finalCustomerId;
       await ds.getRepository<Restaurant>("restaurants").save(saved);
     }
   }
-  // Agent existant → sync nom/voix/timezone/config flags si changé
+  // Agent existant → sync nom/voix/timezone/config flags/chat si changé
   else if (saved.agentId) {
     const agentUpdates: Record<string, any> = {};
     if (saved.name !== oldName) agentUpdates.name = saved.name;
     if (saved.aiVoice !== oldVoice) agentUpdates.aiVoice = saved.aiVoice;
     if (saved.timezone !== oldTimezone) agentUpdates.timezone = saved.timezone;
+
+    // Sync chat fields
+    if (saved.chatEnabled !== oldChatEnabled) agentUpdates.chatEnabled = saved.chatEnabled;
+    if (saved.chatMode !== oldChatMode) agentUpdates.chatMode = saved.chatMode;
+    if (saved.chatTitle !== oldChatTitle) agentUpdates.chatTitle = saved.chatTitle || saved.name;
+    if (saved.chatOpenOnLoad !== oldChatOpenOnLoad) agentUpdates.chatOpenOnLoad = saved.chatOpenOnLoad;
 
     // Sync config flags pour conditions tools
     const configFlags = {

@@ -174,6 +174,19 @@ export class Restaurant {
   @Column({ name: "order_status_enabled", type: "boolean", default: false })
   orderStatusEnabled!: boolean;
 
+  // --- Chat Widget ---
+  @Column({ name: "chat_enabled", type: "boolean", default: false })
+  chatEnabled!: boolean;
+
+  @Column({ name: "chat_mode", type: "varchar", length: 20, default: "text" })
+  chatMode!: string; // "text" | "stt_tts" | "realtime"
+
+  @Column({ name: "chat_title", type: "varchar", length: 100, nullable: true })
+  chatTitle!: string | null;
+
+  @Column({ name: "chat_open_on_load", type: "boolean", default: false })
+  chatOpenOnLoad!: boolean;
+
   // --- Mode SIP ---
   @Column({ name: "sip_enabled", type: "boolean", default: false })
   sipEnabled!: boolean;
@@ -183,6 +196,9 @@ export class Restaurant {
 
   @Column({ name: "agent_id", type: "varchar", length: 36, nullable: true })
   agentId!: string | null;
+
+  @Column({ name: "agent_api_token", type: "varchar", length: 128, nullable: true })
+  agentApiToken!: string | null;
 
   @Column({ name: "final_customer_id", type: "varchar", length: 36, nullable: true })
   finalCustomerId!: string | null;

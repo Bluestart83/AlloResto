@@ -119,6 +119,10 @@ export async function provisionAgent(restaurant: {
   transferPhoneNumber?: string | null;
   transferAutomatic?: boolean;
   maxCallDurationSec?: number;
+  chatEnabled?: boolean;
+  chatMode?: string;
+  chatTitle?: string;
+  chatOpenOnLoad?: boolean;
   sip?: {
     transport?: string;
     stunServer?: string;
@@ -126,7 +130,7 @@ export async function provisionAgent(restaurant: {
     username: string;
     password: string;
   } | null;
-}): Promise<{ agentId: string | null; finalCustomerId: string | null }> {
+}): Promise<{ agentId: string | null; agentApiToken?: string | null; finalCustomerId: string | null }> {
   try {
     const accountId = await ensureAccount();
 
@@ -153,6 +157,10 @@ export async function provisionAgent(restaurant: {
         maxCallDurationSec: restaurant.maxCallDurationSec || 600,
         onCallEndWebhook: `={{BASE_URL}}/api/calls`,
         externalSessionUrl: `=${ALLORESTO_URL}/api/ai?restaurantId={{config.restaurantId}}&callerPhone={{callerPhone}}`,
+        chatEnabled: restaurant.chatEnabled ?? false,
+        chatMode: restaurant.chatMode || "text",
+        chatTitle: restaurant.chatTitle || restaurant.name,
+        chatOpenOnLoad: restaurant.chatOpenOnLoad ?? false,
         config: {
           restaurantId: restaurant.id,
           deliveryEnabled: restaurant.deliveryEnabled ?? true,
@@ -225,10 +233,10 @@ export async function provisionAgent(restaurant: {
     console.log(
       `[sip-provisioning] ${ALLORESTO_TOOL_DEFINITIONS.length} tools created for agent ${agent.id}`
     );
-    return { agentId: agent.id, finalCustomerId };
+    return { agentId: agent.id, agentApiToken: agent.apiToken, finalCustomerId };
   } catch (err) {
     console.error("[sip-provisioning] Provisioning failed:", err);
-    return { agentId: null, finalCustomerId: null };
+    return { agentId: null, agentApiToken: null, finalCustomerId: null };
   }
 }
 
@@ -327,6 +335,10 @@ export async function updateAgent(
     externalSessionUrl?: string;
     onCallEndWebhook?: string;
     config?: Record<string, any>;
+    chatEnabled?: boolean;
+    chatMode?: string;
+    chatTitle?: string;
+    chatOpenOnLoad?: boolean;
   }
 ): Promise<void> {
   try {

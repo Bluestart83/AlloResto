@@ -1173,7 +1173,8 @@ async function resolveSipCredentials(
 
 export async function buildAiSessionConfig(
   restaurantId: string,
-  callerPhone: string
+  callerPhone: string,
+  mode: "phone" | "chat" = "phone",
 ): Promise<AiSessionConfig> {
   const ds = await getDb();
 
@@ -1275,16 +1276,28 @@ export async function buildAiSessionConfig(
 
   // Build greeting (first AI response trigger)
   let greeting: string;
-  if (customerContext?.firstName) {
-    greeting =
-      `Le client ${customerContext.firstName} vient d'appeler ` +
-      `(client fidele, ${customerContext.totalOrders} commandes). ` +
-      `Accueille-le par son prenom et demande ce qu'il souhaite commander.`;
+  if (mode === "chat") {
+    if (customerContext?.firstName) {
+      greeting =
+        `Bonjour ${customerContext.firstName} ! Bienvenue sur le chat de ${restaurant.name}. ` +
+        `Comment puis-je vous aider ?`;
+    } else {
+      greeting =
+        `Bonjour ! Bienvenue sur le chat de ${restaurant.name}. ` +
+        `Comment puis-je vous aider ?`;
+    }
   } else {
-    greeting =
-      "Un nouveau client vient d'appeler. " +
-      "Accueille-le chaleureusement, presente-toi brievement " +
-      "et demande ce qu'il souhaite commander.";
+    if (customerContext?.firstName) {
+      greeting =
+        `Le client ${customerContext.firstName} vient d'appeler ` +
+        `(client fidele, ${customerContext.totalOrders} commandes). ` +
+        `Accueille-le par son prenom et demande ce qu'il souhaite commander.`;
+    } else {
+      greeting =
+        "Un nouveau client vient d'appeler. " +
+        "Accueille-le chaleureusement, presente-toi brievement " +
+        "et demande ce qu'il souhaite commander.";
+    }
   }
 
   // Build initialContext for sip-agent-server ContextStore

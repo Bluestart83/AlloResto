@@ -12,6 +12,7 @@ import { buildAiSessionConfig } from "@/services/ai-prompt.service";
 export async function GET(req: NextRequest) {
   const restaurantId = req.nextUrl.searchParams.get("restaurantId");
   const callerPhone = req.nextUrl.searchParams.get("callerPhone") || "";
+  const mode = (req.nextUrl.searchParams.get("mode") || "phone") as "phone" | "chat";
 
   if (!restaurantId) {
     return NextResponse.json(
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const config = await buildAiSessionConfig(restaurantId, callerPhone);
+    const config = await buildAiSessionConfig(restaurantId, callerPhone, mode);
     return NextResponse.json(config);
   } catch (error: any) {
     console.error("AI prompt build error:", error);
