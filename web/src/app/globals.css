@@ -301,6 +301,7 @@ body {
 }
 
 .public-hero {
+  position: relative;
   width: 100%;
   max-height: 320px;
   overflow: hidden;
@@ -312,6 +313,67 @@ body {
   height: 320px;
   object-fit: cover;
   display: block;
+}
+
+.public-hero-content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 48px 0 24px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.65));
+  color: #fff;
+  z-index: 1;
+}
+
+.public-hero-plain {
+  max-height: none;
+  background: var(--vo-primary, #4f46e5);
+}
+.public-hero-plain .public-hero-content {
+  position: static;
+  background: none;
+  padding: 48px 0 32px;
+}
+
+.public-hero-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 0;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.public-hero-plain .public-hero-title {
+  text-shadow: none;
+}
+
+.public-hero-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
+
+.public-quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--vo-primary, #4f46e5);
+  font-size: 0.875rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.public-quick-link:hover {
+  color: #4338ca;
+  text-decoration: underline;
+}
+
+.public-icon {
+  color: var(--vo-primary);
 }
 
 .public-menu-category-title {
