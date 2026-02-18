@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import type { PhoneLine } from "@/db/entities/PhoneLine";
 import type { Restaurant } from "@/db/entities/Restaurant";
-import { encryptSipPassword, isEncrypted } from "@/services/sip-encryption.service";
-import { updateAgent, upsertPhoneLine } from "@/services/sip-agent-provisioning.service";
+import { encryptSipPassword, decryptSipPassword, isEncrypted } from "@/services/sip-encryption.service";
+import { provisionAgent, updateAgent, upsertPhoneLine } from "@/services/sip-agent-provisioning.service";
 
 /**
  * GET /api/phone-lines?restaurantId=xxx
@@ -114,7 +114,42 @@ export async function PUT(req: NextRequest) {
   await repo.save(phoneLine);
 
   // Sync vers sip-agent-server
-  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
+  let restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
+
+  // Pas encore d'agent → provisionner si sipEnabled
+  if (restaurant && !restaurant.agentId && restaurant.sipEnabled) {
+    let sipCreds: { domain: string; username: string; password: string } | null = null;
+    if (phoneLine.sipDomain && phoneLine.sipUsername && phoneLine.sipPassword) {
+      try {
+        sipCreds = {
+          domain: phoneLine.sipDomain,
+          username: phoneLine.sipUsername,
+          password: sipPassword || decryptSipPassword(phoneLine.sipPassword, phoneLine.id),
+        };
+      } catch { /* ignore decrypt errors */ }
+    }
+    const { agentId, finalCustomerId } = await provisionAgent({
+      id: restaurant.id,
+      name: restaurant.name,
+      aiVoice: restaurant.aiVoice,
+      timezone: restaurant.timezone,
+      contactEmail: restaurant.contactEmail,
+      phone: restaurant.phone,
+      deliveryEnabled: restaurant.deliveryEnabled,
+      reservationEnabled: restaurant.reservationEnabled,
+      orderStatusEnabled: restaurant.orderStatusEnabled,
+      transferEnabled: restaurant.transferEnabled,
+      transferPhoneNumber: restaurant.transferPhoneNumber,
+      transferAutomatic: restaurant.transferAutomatic,
+      sip: sipCreds,
+    });
+    if (agentId || finalCustomerId) {
+      if (agentId) restaurant.agentId = agentId;
+      if (finalCustomerId) restaurant.finalCustomerId = finalCustomerId;
+      await ds.getRepository<Restaurant>("restaurants").save(restaurant);
+    }
+  }
+
   if (restaurant?.agentId) {
     // Sync PhoneLine (SIP creds + transport) vers sip-agent-server → declenche re-register
     const plUpdates: Record<string, any> = { provider: phoneLine.provider };
