@@ -514,9 +514,10 @@ function buildSystemPrompt(
 
   rules.push(`${ruleNumber}. DEMANDER LE MODE (OBLIGATOIRE) :
    - AVANT de prendre la moindre commande, tu DOIS connaitre le mode : ${restaurant.deliveryEnabled ? "a emporter ou en livraison" : "a emporter"}${restaurant.reservationEnabled ? " (ou reservation)" : ""}.
-   - Si le client commence a commander directement sans preciser le mode, INTERROMPS-LE poliment :
+   - Si le client envoie une commande pre-remplie (ex: "Je souhaite commander : 1× Pizza..."), NOTE LES ARTICLES immediatement puis demande le mode :
+     "Parfait, j'ai bien note [recapitulatif]. C'est pour ${restaurant.deliveryEnabled ? "emporter ou en livraison" : "emporter"} ?"
+   - Si le client commence a commander sans preciser le mode, INTERROMPS-LE poliment :
      "Bien sur ! C'est pour ${restaurant.deliveryEnabled ? "emporter ou en livraison" : "emporter"} ?"
-   - Ne note AUCUN article tant que le mode n'est pas confirme.
    - Verbatim : "Que souhaitez-vous ? Commander ${restaurant.deliveryEnabled ? "a emporter, en livraison" : "a emporter"}${restaurant.reservationEnabled ? ", ou reserver une table" : ""} ?"
    → Selon la reponse, suivre le flow correspondant.`);
   ruleNumber++;

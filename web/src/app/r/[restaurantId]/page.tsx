@@ -5,6 +5,7 @@ import type { MenuItem } from "@/db/entities/MenuItem";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import OrderCart from "./OrderCart";
+import ReserveButton from "./ReserveButton";
 
 // ---------------------------------------------------------------------------
 // Data loading
@@ -230,6 +231,9 @@ export default async function PublicRestaurantPage({ params }: PageProps) {
                     </a>
                   )}
                 </div>
+                {restaurant.reservationEnabled && restaurant.agentApiToken && (
+                  <ReserveButton />
+                )}
               </div>
             </div>
           </div>
@@ -283,6 +287,10 @@ export default async function PublicRestaurantPage({ params }: PageProps) {
           showMenuIcons={restaurant.showMenuIcons !== false}
           chatEnabled={!!restaurant.agentApiToken}
           phone={restaurant.phone}
+          deliveryEnabled={!!restaurant.deliveryEnabled}
+          deliveryFee={Number(restaurant.deliveryFee) || 0}
+          deliveryFreeAbove={restaurant.deliveryFreeAbove ? Number(restaurant.deliveryFreeAbove) : null}
+          minOrderAmount={Number(restaurant.minOrderAmount) || 0}
         />
 
         {/* Gallery */}

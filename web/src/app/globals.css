@@ -553,6 +553,87 @@ body {
   border-bottom: none;
 }
 
+/* ---- Order mode toggle ---- */
+
+.public-order-mode-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.public-order-mode-btn {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: none;
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  white-space: nowrap;
+}
+.public-order-mode-btn:not(:last-child) {
+  border-right: 1px solid #e5e7eb;
+}
+.public-order-mode-btn.active {
+  background: var(--vo-primary);
+  color: #fff;
+}
+.public-order-mode-btn:hover:not(.active) {
+  background: var(--vo-primary-light);
+  color: var(--vo-primary);
+}
+
+/* ---- Cart subtotal / fees ---- */
+
+.public-cart-subtotal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  margin-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  color: #6b7280;
+}
+
+.public-cart-warning {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.public-order-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.public-reserve-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border: 2px solid var(--vo-primary);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--vo-primary);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+.public-reserve-btn:hover {
+  background: var(--vo-primary);
+  color: #fff;
+}
+.public-reserve-btn:active {
+  transform: scale(0.98);
+}
+
 .public-cart-total {
   display: flex;
   justify-content: space-between;

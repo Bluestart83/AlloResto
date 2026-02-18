@@ -38,6 +38,8 @@ interface CartCategory {
   name: string;
 }
 
+type OrderMode = "emporter" | "livraison";
+
 interface OrderCartProps {
   categories: CartCategory[];
   items: CartItem[];
@@ -45,6 +47,10 @@ interface OrderCartProps {
   showMenuIcons: boolean;
   chatEnabled: boolean;
   phone?: string | null;
+  deliveryEnabled: boolean;
+  deliveryFee: number;
+  deliveryFreeAbove: number | null;
+  minOrderAmount: number;
 }
 
 interface SelectedOption {
@@ -79,10 +85,11 @@ function makeCartKey(itemId: string, selectedOptions: SelectedOption[]): string 
 // Component
 // ---------------------------------------------------------------------------
 
-export default function OrderCart({ categories, items, currency, showMenuIcons, chatEnabled, phone }: OrderCartProps) {
+export default function OrderCart({ categories, items, currency, showMenuIcons, chatEnabled, phone, deliveryEnabled, deliveryFee, deliveryFreeAbove, minOrderAmount }: OrderCartProps) {
   const [cart, setCart] = useState<Map<string, CartEntry>>(new Map());
   const [optionModal, setOptionModal] = useState<CartItem | null>(null);
   const [modalSelections, setModalSelections] = useState<Record<string, { label: string; modifier: number }>>({});
+  const [orderMode, setOrderMode] = useState<OrderMode>("emporter");
 
   // Item lookup by ID (for source: "items" options)
   const itemsById = useMemo(() => {
@@ -230,7 +237,14 @@ export default function OrderCart({ categories, items, currency, showMenuIcons, 
 
   const cartEntries = Array.from(cart.values());
   const totalItems = cartEntries.reduce((s, e) => s + e.quantity, 0);
-  const totalPrice = cartEntries.reduce((s, e) => s + e.unitPrice * e.quantity, 0);
+  const subtotal = cartEntries.reduce((s, e) => s + e.unitPrice * e.quantity, 0);
+
+  // Delivery fee logic
+  const isDelivery = orderMode === "livraison";
+  const deliveryFreeApplied = isDelivery && deliveryFreeAbove !== null && subtotal >= deliveryFreeAbove;
+  const appliedDeliveryFee = isDelivery && deliveryFee > 0 && !deliveryFreeApplied ? deliveryFee : 0;
+  const totalPrice = subtotal + appliedDeliveryFee;
+  const belowMinOrder = isDelivery && minOrderAmount > 0 && subtotal < minOrderAmount;
 
   const modalTotalModifier = Object.values(modalSelections).reduce((s, sel) => s + sel.modifier, 0);
   const modalUnitPrice = optionModal ? Number(optionModal.price) + modalTotalModifier : 0;
@@ -243,6 +257,7 @@ export default function OrderCart({ categories, items, currency, showMenuIcons, 
   // -------------------------------------------------------------------------
 
   function handleOrder() {
+    const modeLabel = orderMode === "emporter" ? "à emporter" : "en livraison";
     const summary = cartEntries
       .map(({ item, selectedOptions, unitPrice, quantity }) => {
         let line = `${quantity}× ${item.name}`;
@@ -253,13 +268,24 @@ export default function OrderCart({ categories, items, currency, showMenuIcons, 
         return line;
       })
       .join("\n");
-    const msg = `Je souhaite commander :\n${summary}\n\nTotal : ${fmtPrice(totalPrice, currency)}`;
+    let msg = `Je souhaite commander (${modeLabel}) :\n${summary}`;
+    if (appliedDeliveryFee > 0) {
+      msg += `\nFrais de livraison : ${fmtPrice(appliedDeliveryFee, currency)}`;
+    }
+    if (deliveryFreeApplied) {
+      msg += `\nFrais de livraison : offerts`;
+    }
+    msg += `\n\nTotal : ${fmtPrice(totalPrice, currency)}`;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SASChat = (window as any).SASChat;
     if (chatEnabled && SASChat) {
-      SASChat.open();
-      window.dispatchEvent(new CustomEvent("sas-chat-send", { detail: { message: msg } }));
+      if (typeof SASChat.send === "function") {
+        SASChat.send(msg);
+      } else {
+        SASChat.open();
+        window.dispatchEvent(new CustomEvent("sas-chat-send", { detail: { message: msg } }));
+      }
     } else if (phone) {
       window.location.href = `tel:${phone}`;
     }
@@ -420,21 +446,76 @@ export default function OrderCart({ categories, items, currency, showMenuIcons, 
                   ))}
                 </div>
 
+                {/* Mode toggle */}
+                <div className="public-order-mode-toggle mt-2 mb-2">
+                  <button
+                    className={`public-order-mode-btn${orderMode === "emporter" ? " active" : ""}`}
+                    onClick={() => setOrderMode("emporter")}
+                  >
+                    <i className="bi bi-bag me-1" />Emporter
+                  </button>
+                  {deliveryEnabled && (
+                    <button
+                      className={`public-order-mode-btn${orderMode === "livraison" ? " active" : ""}`}
+                      onClick={() => setOrderMode("livraison")}
+                    >
+                      <i className="bi bi-truck me-1" />Livraison
+                    </button>
+                  )}
+                </div>
+
+                {/* Sous-total + frais de livraison */}
+                <div className="public-cart-subtotal">
+                  <div className="d-flex justify-content-between small">
+                    <span>Sous-total</span>
+                    <span>{fmtPrice(subtotal, currency)}</span>
+                  </div>
+                  {isDelivery && deliveryFee > 0 && (
+                    <div className="d-flex justify-content-between small">
+                      <span>Frais de livraison</span>
+                      {deliveryFreeApplied ? (
+                        <span className="text-success">
+                          <s className="text-muted me-1">{fmtPrice(deliveryFee, currency)}</s>
+                          Offerts
+                        </span>
+                      ) : (
+                        <span>{fmtPrice(deliveryFee, currency)}</span>
+                      )}
+                    </div>
+                  )}
+                  {deliveryFreeApplied && (
+                    <div className="d-flex justify-content-between small text-success">
+                      <span>Réduction livraison</span>
+                      <span>−{fmtPrice(deliveryFee, currency)}</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="public-cart-total">
                   <span className="fw-bold">Total</span>
                   <span className="fw-bold public-cart-total-price">{fmtPrice(totalPrice, currency)}</span>
                 </div>
 
+                {/* Warning minimum livraison */}
+                {belowMinOrder && (
+                  <div className="public-cart-warning small">
+                    <i className="bi bi-exclamation-triangle me-1" />
+                    Minimum de commande : {fmtPrice(minOrderAmount, currency)} pour la livraison
+                  </div>
+                )}
+
                 {/* Bouton Commander */}
                 <button
                   className="public-order-btn mt-3 w-100"
                   onClick={handleOrder}
+                  disabled={belowMinOrder}
                 >
                   <i className={`bi ${chatEnabled ? "bi-chat-dots" : "bi-telephone"} me-2`} />
                   Commander
                 </button>
               </>
             )}
+
           </div>
         </div>
       </div>
