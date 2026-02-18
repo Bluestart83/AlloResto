@@ -4,6 +4,7 @@ import type { MenuCategory } from "@/db/entities/MenuCategory";
 import type { MenuItem } from "@/db/entities/MenuItem";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import OrderCart from "./OrderCart";
 
 // ---------------------------------------------------------------------------
 // Data loading
@@ -109,16 +110,19 @@ export default async function PublicRestaurantPage({ params }: PageProps) {
   const { restaurant, categories, items } = data;
   const currency = restaurant.currency || "EUR";
 
-  // Group items by category
-  const itemsByCategory = new Map<string | null, typeof items>();
-  for (const item of items) {
-    const key = item.categoryId;
-    if (!itemsByCategory.has(key)) itemsByCategory.set(key, []);
-    itemsByCategory.get(key)!.push(item);
-  }
-
-  // Formules = items without category
-  const formules = itemsByCategory.get(null) || [];
+  // Serialize for client component
+  const serializedCategories = categories.map((c) => ({ id: c.id, name: c.name }));
+  const serializedItems = items.map((i) => ({
+    id: i.id,
+    name: i.name,
+    description: i.description,
+    price: Number(i.price),
+    ingredients: i.ingredients,
+    allergens: i.allergens,
+    tags: i.tags,
+    options: i.options,
+    categoryId: i.categoryId,
+  }));
 
   return (
     <>
@@ -271,100 +275,18 @@ export default async function PublicRestaurantPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Menu */}
-        <h2 className="fw-bold mb-3 border-bottom pb-2">
-          <i className="bi bi-book me-2" />Carte
-        </h2>
-
-        {categories.map((cat) => {
-          const catItems = itemsByCategory.get(cat.id);
-          if (!catItems?.length) return null;
-
-          return (
-            <div key={cat.id} className="mb-4">
-              <h4 className="public-menu-category-title">{cat.name}</h4>
-              <div className="row g-2">
-                {catItems.map((item) => (
-                  <div key={item.id} className="col-md-6">
-                    <div className="public-menu-item">
-                      <div className="d-flex justify-content-between align-items-start">
-                        <div className="flex-grow-1">
-                          <div className="fw-semibold">{item.name}</div>
-                          {item.description && (
-                            <div className="text-muted small">{item.description}</div>
-                          )}
-                          {item.ingredients?.length > 0 && (
-                            <div className="text-muted small fst-italic">
-                              {item.ingredients.join(", ")}
-                            </div>
-                          )}
-                          <div className="d-flex flex-wrap gap-1 mt-1">
-                            {item.allergens?.length > 0 && (
-                              <span className="badge bg-warning bg-opacity-10 text-warning small">
-                                <i className="bi bi-exclamation-triangle me-1" />
-                                {item.allergens.join(", ")}
-                              </span>
-                            )}
-                            {item.tags?.map((tag) => (
-                              <span key={tag} className="badge bg-success bg-opacity-10 text-success small">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                          {/* Options */}
-                          {item.options?.length > 0 && (
-                            <div className="mt-1 small text-muted">
-                              {item.options.map((opt: any, oi: number) => (
-                                <div key={oi}>
-                                  <span className="fw-medium">{opt.name}</span> :{" "}
-                                  {opt.choices?.map((c: any) => (
-                                    `${c.label}${c.price_modifier ? ` (+${formatPrice(c.price_modifier, currency)})` : ""}`
-                                  )).join(", ")}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="public-menu-price ms-3">
-                          {formatPrice(Number(item.price), currency)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Formules */}
-        {formules.length > 0 && (
-          <div className="mb-4">
-            <h4 className="public-menu-category-title">Formules & Menus</h4>
-            <div className="row g-2">
-              {formules.map((item) => (
-                <div key={item.id} className="col-md-6">
-                  <div className="public-menu-item public-menu-formule">
-                    <div className="d-flex justify-content-between align-items-start">
-                      <div>
-                        <div className="fw-semibold">{item.name}</div>
-                        {item.description && (
-                          <div className="text-muted small">{item.description}</div>
-                        )}
-                      </div>
-                      <div className="public-menu-price ms-3">
-                        {formatPrice(Number(item.price), currency)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Menu + Panier */}
+        <OrderCart
+          categories={serializedCategories}
+          items={serializedItems}
+          currency={currency}
+          showMenuIcons={restaurant.showMenuIcons !== false}
+          chatEnabled={!!restaurant.agentApiToken}
+          phone={restaurant.phone}
+        />
 
         {/* Gallery */}
-        {restaurant.gallery?.length > 0 && (
+        {restaurant.showGallery !== false && restaurant.gallery?.length > 0 && (
           <div className="mb-4">
             <h2 className="fw-bold mb-3 border-bottom pb-2">
               <i className="bi bi-images me-2" />Photos

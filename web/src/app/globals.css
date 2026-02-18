@@ -385,16 +385,65 @@ body {
   margin-bottom: 12px;
 }
 
+.public-food-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: var(--vo-primary-light, #eef2ff);
+  border: 2px solid transparent;
+  font-size: 30px;
+  line-height: 1;
+  transition: border-color 0.15s;
+}
+.public-menu-item-active .public-food-icon {
+  border-color: #d1d5db;
+}
+
+.public-order-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 10px;
+  background: var(--vo-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.public-order-btn:hover {
+  background: #4338ca;
+}
+.public-order-btn:active {
+  transform: scale(0.98);
+}
+
 .public-menu-item {
+  position: relative;
   padding: 12px 16px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fafafa;
-  transition: box-shadow 0.15s;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  cursor: pointer;
+  user-select: none;
 }
 
 .public-menu-item:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-color: var(--vo-primary);
+}
+
+.public-menu-item-active {
+  border-color: var(--vo-primary);
+  background: var(--vo-primary-light, #eef2ff);
 }
 
 .public-menu-formule {
@@ -407,6 +456,233 @@ body {
   font-weight: 700;
   color: var(--vo-primary);
   white-space: nowrap;
+}
+
+/* ---- Cart badge on menu items ---- */
+
+.public-cart-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--vo-primary);
+  border-radius: 20px;
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+.public-cart-badge-qty {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  min-width: 20px;
+  text-align: center;
+}
+
+.public-cart-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+.public-cart-btn:hover {
+  background: rgba(255,255,255,0.45);
+}
+
+.public-cart-btn-remove {
+  background: rgba(255,255,255,0.15);
+  color: #fca5a5;
+}
+.public-cart-btn-remove:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* ---- Cart panel (right sidebar) ---- */
+
+.public-cart-panel {
+  position: sticky;
+  top: 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.public-cart-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--vo-primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.public-cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.public-cart-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+.public-cart-line:last-child {
+  border-bottom: none;
+}
+
+.public-cart-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  margin-top: 12px;
+  border-top: 2px solid var(--vo-primary);
+}
+
+.public-cart-total-price {
+  font-size: 1.25rem;
+  color: var(--vo-primary);
+}
+
+/* ---- Qty badge (simple, for items with options) ---- */
+
+.public-cart-badge-qty-simple {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--vo-primary);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* ---- Corner close button (×) ---- */
+
+.public-cart-corner-close {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--vo-primary);
+  background: #fff;
+  color: var(--vo-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  z-index: 2;
+  transition: transform 0.1s, background 0.15s;
+}
+.public-cart-corner-close:hover {
+  transform: scale(1.15);
+  background: var(--vo-primary);
+  color: #fff;
+}
+
+/* ---- Quantity bar (inline, right-aligned) ---- */
+
+.public-cart-qty-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--vo-primary);
+  border-radius: 16px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ---- Option selection modal ---- */
+
+.public-option-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.public-option-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.public-option-choice {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.public-option-choice:hover {
+  border-color: var(--vo-primary);
+  background: #fafafe;
+}
+.public-option-choice-selected {
+  border-color: var(--vo-primary);
+  background: var(--vo-primary-light, #eef2ff);
+}
+
+.public-option-confirm {
+  background: var(--vo-primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.public-option-confirm:hover:not(:disabled) {
+  background: #4338ca;
+  color: #fff;
+}
+.public-option-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #fff;
 }
 
 .public-gallery {

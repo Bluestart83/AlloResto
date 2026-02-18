@@ -159,6 +159,12 @@ export class Restaurant {
   @Column({ name: "gallery", type: "simple-json", default: "[]" })
   gallery!: string[];
 
+  @Column({ name: "show_gallery", type: "boolean", default: true })
+  showGallery!: boolean;
+
+  @Column({ name: "show_menu_icons", type: "boolean", default: true })
+  showMenuIcons!: boolean;
+
   // --- Données brutes API (debug / ré-import) ---
   @Column({ name: "google_place_raw", type: "simple-json", nullable: true })
   googlePlaceRaw!: Record<string, any> | null;
