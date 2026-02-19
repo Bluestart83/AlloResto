@@ -168,6 +168,25 @@ Retourne : `available`, `estimatedTime`, `estimatedTimeISO`, et selon le mode : 
 
 ---
 
+## Facturation et Abonnements
+
+Routes proxy vers sip-agent-server. Authentification Better Auth requise (admin ou owner du restaurant).
+
+| Methode | Route                                      | Description                                                      |
+| ------- | ------------------------------------------ | ---------------------------------------------------------------- |
+| GET     | `/api/plans/:restaurantId`                 | Plans disponibles pour le restaurant (plans actifs de l'account) |
+| GET     | `/api/subscriptions/:restaurantId`         | Souscriptions actives du restaurant                              |
+| POST    | `/api/subscriptions/:restaurantId`         | Souscrire a un plan. Body : `{ "planId": "xxx" }`               |
+| DELETE  | `/api/subscriptions/:restaurantId/:subId`  | Annuler une souscription                                         |
+| GET     | `/api/billing/:restaurantId/balance`       | Solde du compte                                                  |
+| GET     | `/api/billing/:restaurantId/transactions`  | Historique des transactions                                      |
+
+### Auto-souscription
+
+A la creation d'un restaurant, le provisioning souscrit automatiquement au premier plan de base actif de l'account (plan par defaut).
+
+---
+
 ## Statistiques et Tarification
 
 | Methode | Route               | Description                                                        |

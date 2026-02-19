@@ -103,6 +103,51 @@ async function ensureFinalCustomer(
   return fc.id;
 }
 
+// ─── Default Plan Subscription ────────────────────────────────────────────────
+
+async function subscribeToDefaultPlan(
+  accountId: string,
+  finalCustomerId: string
+): Promise<void> {
+  try {
+    // Récupère les plans de base actifs de l'account (triés par sortOrder)
+    const plansResp = await sipFetch(`/plans?accountId=${accountId}`);
+    if (!plansResp.ok) return;
+
+    const plans = (await plansResp.json()) as {
+      id: string;
+      isOption: boolean;
+      isActive: boolean;
+    }[];
+    const defaultPlan = plans.find((p) => !p.isOption && p.isActive);
+    if (!defaultPlan) {
+      console.log("[sip-provisioning] Aucun plan par défaut trouvé, skip souscription");
+      return;
+    }
+
+    const subResp = await sipFetch(
+      `/final-customers/${finalCustomerId}/subscriptions`,
+      {
+        method: "POST",
+        body: JSON.stringify({ planId: defaultPlan.id }),
+      }
+    );
+
+    if (subResp.ok) {
+      console.log(
+        `[sip-provisioning] FinalCustomer ${finalCustomerId} souscrit au plan ${defaultPlan.id}`
+      );
+    } else {
+      const text = await subResp.text();
+      console.error(
+        `[sip-provisioning] Subscription failed (${subResp.status}): ${text}`
+      );
+    }
+  } catch (err) {
+    console.error("[sip-provisioning] Default plan subscription failed:", err);
+  }
+}
+
 // ─── Agent ────────────────────────────────────────────────────────────────────
 
 export async function provisionAgent(restaurant: {
@@ -136,6 +181,9 @@ export async function provisionAgent(restaurant: {
 
     // Crée le FinalCustomer
     const finalCustomerId = await ensureFinalCustomer(accountId, restaurant);
+
+    // Souscrit au plan par défaut (premier plan de base actif de l'account)
+    await subscribeToDefaultPlan(accountId, finalCustomerId);
 
     // Crée l'agent
     const agentResp = await sipFetch("/agents", {
