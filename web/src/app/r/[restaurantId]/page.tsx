@@ -184,102 +184,7 @@ export default async function PublicRestaurantPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Info cards */}
-        <div className="row g-3 mb-4">
-          {/* Horaires */}
-          {restaurant.openingHours && Object.keys(restaurant.openingHours).length > 0 && (
-            <div className="col-md-4">
-              <div className="card h-100">
-                <div className="card-body">
-                  <h6 className="fw-bold mb-2">
-                    <i className="bi bi-clock me-2 public-icon" />Horaires
-                  </h6>
-                  <div className="small">
-                    {formatOpeningHours(restaurant.openingHours).map(({ day, hours }) => (
-                      <div key={day} className="d-flex justify-content-between py-1">
-                        <span className="fw-medium">{day}</span>
-                        <span className={hours === "Fermé" ? "text-muted fst-italic" : ""}>{hours}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Contact */}
-          <div className="col-md-4">
-            <div className="card h-100">
-              <div className="card-body">
-                <h6 className="fw-bold mb-2">
-                  <i className="bi bi-telephone me-2 public-icon" />Contact
-                </h6>
-                <div className="small d-flex flex-column gap-1">
-                  {restaurant.phone && (
-                    <a href={`tel:${restaurant.phone}`} className="public-quick-link">
-                      <i className="bi bi-phone me-1" />{formatPhone(restaurant.phone)}
-                    </a>
-                  )}
-                  {restaurant.website && (
-                    <a href={restaurant.website} target="_blank" rel="noopener noreferrer" className="public-quick-link">
-                      <i className="bi bi-globe me-1" />{restaurant.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                    </a>
-                  )}
-                  {restaurant.address && (
-                    <a href={mapsUrl(restaurant.address, restaurant.postalCode, restaurant.city)} target="_blank" rel="noopener noreferrer" className="public-quick-link mt-1">
-                      <i className="bi bi-geo-alt me-1" />{restaurant.address}{restaurant.postalCode ? `, ${restaurant.postalCode}` : ""} {restaurant.city || ""}
-                    </a>
-                  )}
-                </div>
-                {restaurant.reservationEnabled && restaurant.agentApiToken && (
-                  <ReserveButton />
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Livraison */}
-          {restaurant.deliveryEnabled && (
-            <div className="col-md-4">
-              <div className="card h-100">
-                <div className="card-body">
-                  <h6 className="fw-bold mb-2">
-                    <i className="bi bi-truck me-2 public-icon" />Livraison
-                  </h6>
-                  <div className="small d-flex flex-column gap-2">
-                    <div className="d-flex align-items-center gap-2">
-                      <i className="bi bi-geo public-icon" />
-                      <span>Rayon de <strong>{restaurant.deliveryRadiusKm} km</strong></span>
-                    </div>
-                    {Number(restaurant.minOrderAmount) > 0 && (
-                      <div className="d-flex align-items-center gap-2">
-                        <i className="bi bi-basket public-icon" />
-                        <span>Minimum <strong>{formatPrice(Number(restaurant.minOrderAmount), currency)}</strong></span>
-                      </div>
-                    )}
-                    {Number(restaurant.deliveryFee) > 0 && (
-                      <div className="d-flex align-items-center gap-2">
-                        <i className="bi bi-cash-coin public-icon" />
-                        <span>
-                          Frais <strong>{formatPrice(Number(restaurant.deliveryFee), currency)}</strong>
-                          {restaurant.deliveryFreeAbove && (
-                            <span className="text-success ms-1">(offerts dès {formatPrice(Number(restaurant.deliveryFreeAbove), currency)})</span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                    <div className="d-flex align-items-center gap-2">
-                      <i className="bi bi-stopwatch public-icon" />
-                      <span>Préparation <strong>~{restaurant.avgPrepTimeMin} min</strong></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Menu + Panier */}
+        {/* Menu + Panier + Info cards (droite) */}
         <OrderCart
           categories={serializedCategories}
           items={serializedItems}
@@ -291,7 +196,93 @@ export default async function PublicRestaurantPage({ params }: PageProps) {
           deliveryFee={Number(restaurant.deliveryFee) || 0}
           deliveryFreeAbove={restaurant.deliveryFreeAbove ? Number(restaurant.deliveryFreeAbove) : null}
           minOrderAmount={Number(restaurant.minOrderAmount) || 0}
-        />
+        >
+          {/* Contact */}
+          <div className="card mt-3">
+            <div className="card-body">
+              <h6 className="fw-bold mb-2">
+                <i className="bi bi-telephone me-2 public-icon" />Contact
+              </h6>
+              <div className="small d-flex flex-column gap-1">
+                {restaurant.phone && (
+                  <a href={`tel:${restaurant.phone}`} className="public-quick-link">
+                    <i className="bi bi-phone me-1" />{formatPhone(restaurant.phone)}
+                  </a>
+                )}
+                {restaurant.website && (
+                  <a href={restaurant.website} target="_blank" rel="noopener noreferrer" className="public-quick-link">
+                    <i className="bi bi-globe me-1" />{restaurant.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                  </a>
+                )}
+                {restaurant.address && (
+                  <a href={mapsUrl(restaurant.address, restaurant.postalCode, restaurant.city)} target="_blank" rel="noopener noreferrer" className="public-quick-link mt-1">
+                    <i className="bi bi-geo-alt me-1" />{restaurant.address}{restaurant.postalCode ? `, ${restaurant.postalCode}` : ""} {restaurant.city || ""}
+                  </a>
+                )}
+              </div>
+              {restaurant.reservationEnabled && restaurant.agentApiToken && (
+                <ReserveButton />
+              )}
+            </div>
+          </div>
+
+          {/* Livraison */}
+          {restaurant.deliveryEnabled && (
+            <div className="card mt-3">
+              <div className="card-body">
+                <h6 className="fw-bold mb-2">
+                  <i className="bi bi-truck me-2 public-icon" />Livraison
+                </h6>
+                <div className="small d-flex flex-column gap-2">
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-geo public-icon" />
+                    <span>Rayon de <strong>{restaurant.deliveryRadiusKm} km</strong></span>
+                  </div>
+                  {Number(restaurant.minOrderAmount) > 0 && (
+                    <div className="d-flex align-items-center gap-2">
+                      <i className="bi bi-basket public-icon" />
+                      <span>Minimum <strong>{formatPrice(Number(restaurant.minOrderAmount), currency)}</strong></span>
+                    </div>
+                  )}
+                  {Number(restaurant.deliveryFee) > 0 && (
+                    <div className="d-flex align-items-center gap-2">
+                      <i className="bi bi-cash-coin public-icon" />
+                      <span>
+                        Frais <strong>{formatPrice(Number(restaurant.deliveryFee), currency)}</strong>
+                        {restaurant.deliveryFreeAbove && (
+                          <span className="text-success ms-1">(offerts dès {formatPrice(Number(restaurant.deliveryFreeAbove), currency)})</span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-stopwatch public-icon" />
+                    <span>Préparation <strong>~{restaurant.avgPrepTimeMin} min</strong></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Horaires */}
+          {restaurant.openingHours && Object.keys(restaurant.openingHours).length > 0 && (
+            <div className="card mt-3">
+              <div className="card-body">
+                <h6 className="fw-bold mb-2">
+                  <i className="bi bi-clock me-2 public-icon" />Horaires
+                </h6>
+                <div className="small">
+                  {formatOpeningHours(restaurant.openingHours).map(({ day, hours }) => (
+                    <div key={day} className="d-flex justify-content-between py-1">
+                      <span className="fw-medium">{day}</span>
+                      <span className={hours === "Fermé" ? "text-muted fst-italic" : ""}>{hours}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </OrderCart>
 
         {/* Gallery */}
         {restaurant.showGallery !== false && restaurant.gallery?.length > 0 && (

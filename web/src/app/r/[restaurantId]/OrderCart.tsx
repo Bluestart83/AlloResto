@@ -51,6 +51,7 @@ interface OrderCartProps {
   deliveryFee: number;
   deliveryFreeAbove: number | null;
   minOrderAmount: number;
+  children?: React.ReactNode;
 }
 
 interface SelectedOption {
@@ -85,7 +86,7 @@ function makeCartKey(itemId: string, selectedOptions: SelectedOption[]): string 
 // Component
 // ---------------------------------------------------------------------------
 
-export default function OrderCart({ categories, items, currency, showMenuIcons, chatEnabled, phone, deliveryEnabled, deliveryFee, deliveryFreeAbove, minOrderAmount }: OrderCartProps) {
+export default function OrderCart({ categories, items, currency, showMenuIcons, chatEnabled, phone, deliveryEnabled, deliveryFee, deliveryFreeAbove, minOrderAmount, children }: OrderCartProps) {
   const [cart, setCart] = useState<Map<string, CartEntry>>(new Map());
   const [optionModal, setOptionModal] = useState<CartItem | null>(null);
   const [modalSelections, setModalSelections] = useState<Record<string, { label: string; modifier: number }>>({});
@@ -406,8 +407,8 @@ export default function OrderCart({ categories, items, currency, showMenuIcons, 
           )}
         </div>
 
-        {/* Cart — right col */}
-        <div className="col-lg-4">
+        {/* Cart — right col, aligné sous le trait "Carte" */}
+        <div className="col-lg-4" style={{ marginTop: "3.5rem" }}>
           <div className="public-cart-panel">
             <h5 className="fw-bold mb-3">
               <i className="bi bi-cart3 me-2 public-icon" />
@@ -517,6 +518,7 @@ export default function OrderCart({ categories, items, currency, showMenuIcons, 
             )}
 
           </div>
+          {children}
         </div>
       </div>
 
