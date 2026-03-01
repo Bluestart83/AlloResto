@@ -1,30 +1,50 @@
 /**
  * /api/faq/route.ts
  *
- * CRUD simple — le dédoublonnage est géré par l'IA :
- *   - L'IA reçoit toute la FAQ dans son prompt
- *   - Si la question existe → elle répond directement
- *   - Si c'est nouveau → elle appelle log_new_faq (function call)
- *     qui POST ici
+ * Proxy vers sip-agent-server /api/faqs
+ * Traduit restaurantId → agentId (via la table restaurants)
  *
- * GET    /api/faq?restaurantId=xxx                 → toutes les FAQs
- * GET    /api/faq?restaurantId=xxx&status=pending  → en attente de réponse
- * GET    /api/faq?restaurantId=xxx&for_prompt=true → répondues (pour injection prompt)
- * POST   /api/faq                                  → nouvelle question remontée par l'IA
- * PATCH  /api/faq                                  → le restaurateur répond / ignore
- * DELETE /api/faq?id=xxx                           → supprimer
+ * L'interface AlloResto continue d'utiliser restaurantId,
+ * ce proxy fait la traduction transparente.
+ *
+ * GET    /api/faq?restaurantId=xxx                 → GET  /api/faqs?agentId=yyy
+ * GET    /api/faq?restaurantId=xxx&status=pending   → GET  /api/faqs?agentId=yyy&status=pending
+ * GET    /api/faq?restaurantId=xxx&for_prompt=true  → GET  /api/faqs?agentId=yyy&for_prompt=true
+ * POST   /api/faq                                   → POST /api/faqs
+ * PATCH  /api/faq                                   → PUT  /api/faqs/:id
+ * DELETE /api/faq?id=xxx                            → DELETE /api/faqs/:id
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import type { Faq } from "@/db/entities/Faq";
+import type { Restaurant } from "@/db/entities/Restaurant";
+
+const SIP_AGENT_SERVER_URL =
+  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+
+async function sipFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${SIP_AGENT_SERVER_URL}/api${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...init?.headers,
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+}
+
+/** Résout restaurantId → agentId */
+async function resolveAgentId(restaurantId: string): Promise<string | null> {
+  const ds = await getDb();
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
+  return restaurant?.agentId || null;
+}
 
 // ============================================================
 // GET
 // ============================================================
 
 export async function GET(req: NextRequest) {
-  const ds = await getDb();
   const restaurantId = req.nextUrl.searchParams.get("restaurantId");
   const status = req.nextUrl.searchParams.get("status");
   const forPrompt = req.nextUrl.searchParams.get("for_prompt");
@@ -33,113 +53,68 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "restaurantId required" }, { status: 400 });
   }
 
-  // Mode prompt : uniquement les FAQs avec réponse (pour injection dans le system prompt)
-  if (forPrompt === "true") {
-    const faqs = await ds.getRepository<Faq>("faqs").find({
-      where: { restaurantId, status: "answered" },
-      order: { askCount: "DESC" },
-    });
-    return NextResponse.json(faqs);
+  const agentId = await resolveAgentId(restaurantId);
+  if (!agentId) {
+    return NextResponse.json({ error: "Restaurant non provisionné" }, { status: 404 });
   }
 
-  const where: any = { restaurantId };
-  if (status) where.status = status;
+  const params = new URLSearchParams({ agentId });
+  if (status) params.set("status", status);
+  if (forPrompt) params.set("for_prompt", forPrompt);
 
-  const faqs = await ds.getRepository<Faq>("faqs").find({
-    where,
-    order: { askCount: "DESC", updatedAt: "DESC" },
-  });
-
-  return NextResponse.json(faqs);
+  const resp = await sipFetch(`/faqs?${params}`);
+  const data = await resp.json();
+  return NextResponse.json(data, { status: resp.status });
 }
 
 // ============================================================
-// POST — Nouvelle question remontée par l'IA via function call
+// POST — Nouvelle question (depuis l'IA ou manuellement)
 // ============================================================
-// L'IA appelle log_new_faq quand elle reçoit une question
-// qu'elle ne trouve PAS dans la FAQ existante.
-//
-// Body :
-// {
-//   "restaurantId": "xxx",
-//   "question": "Est-ce que vous avez une terrasse ?",
-//   "category": "other",
-//   "callerPhone": "0612345678"
-// }
 
 export async function POST(req: NextRequest) {
-  const ds = await getDb();
   const body = await req.json();
-
   const { restaurantId, question, category, callerPhone } = body;
 
   if (!restaurantId || !question) {
-    return NextResponse.json(
-      { error: "restaurantId and question required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "restaurantId and question required" }, { status: 400 });
   }
 
-  // Vérifier si l'IA a déjà remonté cette question exacte (double appel possible)
-  const existing = await ds.getRepository<Faq>("faqs").findOneBy({
-    restaurantId,
-    question,
+  const agentId = await resolveAgentId(restaurantId);
+  if (!agentId) {
+    return NextResponse.json({ error: "Restaurant non provisionné" }, { status: 404 });
+  }
+
+  const resp = await sipFetch("/faqs", {
+    method: "POST",
+    body: JSON.stringify({ agentId, question, category, callerPhone }),
   });
 
-  if (existing) {
-    existing.askCount += 1;
-    existing.lastAskedAt = new Date();
-    existing.lastCallerPhone = callerPhone || existing.lastCallerPhone;
-    const updated = await ds.getRepository<Faq>("faqs").save(existing);
-    return NextResponse.json(updated);
-  }
-
-  const faq = ds.getRepository<Faq>("faqs").create({
-    restaurantId,
-    question,
-    category: category || "other",
-    status: "pending",
-    askCount: 1,
-    lastCallerPhone: callerPhone || null,
-    lastAskedAt: new Date(),
-  } as Partial<Faq>) as Faq;
-
-  const saved = await ds.getRepository<Faq>("faqs").save(faq);
-  return NextResponse.json(saved, { status: 201 });
+  const data = await resp.json();
+  return NextResponse.json(data, { status: resp.status });
 }
 
 // ============================================================
 // PATCH — Le restaurateur répond ou ignore
 // ============================================================
-// Body :
-// { "id": "xxx", "answer": "Oui nous avons une terrasse de 20 places" }
-// ou
-// { "id": "xxx", "status": "ignored" }
 
 export async function PATCH(req: NextRequest) {
-  const ds = await getDb();
   const { id, answer, status } = await req.json();
 
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  const faq = await ds.getRepository<Faq>("faqs").findOneBy({ id });
-  if (!faq) {
-    return NextResponse.json({ error: "FAQ not found" }, { status: 404 });
-  }
+  const updateBody: Record<string, any> = {};
+  if (answer !== undefined) updateBody.answer = answer;
+  if (status) updateBody.status = status;
 
-  if (answer !== undefined) {
-    faq.answer = answer;
-    faq.status = "answered";
-  }
+  const resp = await sipFetch(`/faqs/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updateBody),
+  });
 
-  if (status) {
-    faq.status = status;
-  }
-
-  const updated = await ds.getRepository<Faq>("faqs").save(faq);
-  return NextResponse.json(updated);
+  const data = await resp.json();
+  return NextResponse.json(data, { status: resp.status });
 }
 
 // ============================================================
@@ -147,13 +122,13 @@ export async function PATCH(req: NextRequest) {
 // ============================================================
 
 export async function DELETE(req: NextRequest) {
-  const ds = await getDb();
   const id = req.nextUrl.searchParams.get("id");
 
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  await ds.getRepository<Faq>("faqs").delete(id);
-  return NextResponse.json({ success: true });
+  const resp = await sipFetch(`/faqs/${id}`, { method: "DELETE" });
+  const data = await resp.json();
+  return NextResponse.json(data, { status: resp.status });
 }

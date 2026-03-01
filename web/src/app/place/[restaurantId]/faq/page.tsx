@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
+import * as XLSX from "xlsx";
 
 interface FaqItem {
   id: string;
@@ -44,6 +45,7 @@ export default function FaqPage() {
   const [newQuestion, setNewQuestion] = useState("");
   const [newAnswer, setNewAnswer] = useState("");
   const [newCategory, setNewCategory] = useState("other");
+  const importRef = useRef<HTMLInputElement>(null);
 
   const fetchFaqs = () => {
     const url = statusFilter === "all"
@@ -113,6 +115,65 @@ export default function FaqPage() {
     fetchFaqs();
   };
 
+  // ── Import CSV/XLS ──
+  const handleImport = async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws);
+
+      const items = rows
+        .map((row) => ({
+          question: String(row.question || row.Question || row.QUESTION || "").trim(),
+          answer: String(row.answer || row.Answer || row.ANSWER || row.réponse || row.Réponse || "").trim() || undefined,
+          category: String(row.category || row.Category || row.catégorie || row.Catégorie || "other").trim(),
+        }))
+        .filter((item) => item.question);
+
+      if (items.length === 0) {
+        alert("Aucune ligne valide trouvée (colonne 'question' requise)");
+        return;
+      }
+
+      const resp = await fetch("/api/faq/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restaurantId, items }),
+      });
+      const result = await resp.json();
+      alert(`Import : ${result.created} créées, ${result.updated} existantes`);
+      fetchFaqs();
+    } catch {
+      alert("Erreur lors de l'import");
+    }
+  };
+
+  // ── Export XLS ──
+  // Échapper les formules pour éviter CSV/Formula Injection dans Excel
+  const sanitizeCell = (v: string) =>
+    /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+
+  const handleExport = () => {
+    if (faqs.length === 0) {
+      alert("Aucune FAQ à exporter");
+      return;
+    }
+
+    const rows = faqs.map((f) => ({
+      question: sanitizeCell(f.question),
+      answer: sanitizeCell(f.answer || ""),
+      category: f.category,
+      status: f.status,
+      askCount: f.askCount,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "FAQ");
+    XLSX.writeFile(wb, "faq-export.xlsx");
+  };
+
   return (
     <>
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -122,9 +183,28 @@ export default function FaqPage() {
             {faqs.length} question(s) · {faqs.filter((f) => f.status === "pending").length} en attente
           </small>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
-          <i className="bi bi-plus-lg me-1"></i>Ajouter
-        </button>
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-secondary btn-sm" onClick={handleExport} title="Exporter en XLS">
+            <i className="bi bi-download me-1"></i>Export XLS
+          </button>
+          <button className="btn btn-outline-secondary btn-sm" onClick={() => importRef.current?.click()} title="Importer CSV ou XLS">
+            <i className="bi bi-upload me-1"></i>Import
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".csv,.xls,.xlsx"
+            className="d-none"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImport(file);
+              e.target.value = "";
+            }}
+          />
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+            <i className="bi bi-plus-lg me-1"></i>Ajouter
+          </button>
+        </div>
       </div>
 
       {/* Add modal */}

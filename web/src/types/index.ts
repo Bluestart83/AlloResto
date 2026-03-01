@@ -6,8 +6,6 @@ export type CallOutcome = "in_progress" | "order_placed" | "abandoned" | "info_o
 export type OrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "delivering" | "completed" | "cancelled";
 export type OrderType = "pickup" | "delivery";
 export type PaymentMethod = "cash" | "card" | "online";
-export type FaqStatus = "pending" | "answered" | "ignored";
-export type FaqCategory = "horaires" | "livraison" | "allergens" | "paiement" | "parking" | "reservation" | "promotion" | "ingredients" | "other";
 
 export type CuisineType =
   // Européen

@@ -6,7 +6,6 @@ export { MenuItem } from "./MenuItem";
 export { Call, type CallOutcome } from "./Call";
 export { Order, type OrderStatus, type OrderType, type PaymentMethod } from "./Order";
 export { OrderItem } from "./OrderItem";
-export { Faq } from "./Faq";
 export { ExternalLoad } from "./ExternalLoad";
 export { SyncPlatformConfig } from "./SyncPlatformConfig";
 export { SyncExternalMapping } from "./SyncExternalMapping";

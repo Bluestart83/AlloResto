@@ -8,7 +8,6 @@ import { MenuItem } from "./entities/MenuItem";
 import { Call } from "./entities/Call";
 import { Order } from "./entities/Order";
 import { OrderItem } from "./entities/OrderItem";
-import { Faq } from "./entities/Faq";
 import { Reservation } from "./entities/Reservation";
 import { DiningRoom } from "./entities/DiningRoom";
 import { DiningTable } from "./entities/DiningTable";
@@ -32,7 +31,6 @@ const entities = [
   Call,
   Order,
   OrderItem,
-  Faq,
   Reservation,
   DiningRoom,
   DiningTable,

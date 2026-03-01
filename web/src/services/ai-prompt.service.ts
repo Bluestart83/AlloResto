@@ -7,8 +7,8 @@
  *   - Formules / menus composés
  *   - Config livraison (frais, minimum, seuil gratuit)
  *   - Config réservation (places, durée, avance)
- *   - FAQ répondues (base de connaissances)
  *   - Client connu (prénom, adresse, historique)
+ *   (FAQ gérée nativement par sip-agent-server via prompt-assembler)
  *   - SIP credentials (propres au client ou fallback .env)
  *
  * Appelé par le SIP service Python via :
@@ -22,7 +22,6 @@ import { decryptSipPassword, isEncrypted } from "@/services/sip-encryption.servi
 import type { MenuCategory } from "@/db/entities/MenuCategory";
 import type { MenuItem } from "@/db/entities/MenuItem";
 import type { Customer } from "@/db/entities/Customer";
-import type { Faq } from "@/db/entities/Faq";
 import type { DiningService } from "@/db/entities/DiningService";
 import type { Offer } from "@/db/entities/Offer";
 import type { PricingConfig } from "@/db/entities/PricingConfig";
@@ -381,42 +380,6 @@ function buildOffersText(
   return lines.join("\n");
 }
 
-// ============================================================
-// BUILD FAQ TEXT (base de connaissances)
-// ============================================================
-
-function buildFaqText(faqs: Faq[]): string {
-  const lines = [
-    "",
-    "BASE DE CONNAISSANCES (FAQ) :",
-  ];
-
-  if (faqs.length > 0) {
-    lines.push(
-      "Voici les questions frequentes. Si le client pose une de ces questions, reponds DIRECTEMENT avec la reponse fournie.",
-      ""
-    );
-    for (const faq of faqs) {
-      lines.push(`Q: ${faq.question}`);
-      lines.push(`R: ${faq.answer}`);
-      lines.push("");
-    }
-  } else {
-    lines.push("Aucune FAQ enregistree pour le moment.", "");
-  }
-
-  lines.push(
-    "IMPORTANT — Questions non couvertes par la FAQ :",
-    "- Si le client pose une question dont la reponse N'EST PAS dans la FAQ ci-dessus",
-    "  et que tu ne connais PAS la reponse de facon certaine :",
-    '  1. Appelle log_new_faq avec la question reformulee et la categorie appropriee',
-    '  2. Dis au client : "Je n\'ai pas cette information, je remonte votre question au restaurant."',
-    "- NE PAS inventer de reponse. NE PAS deviner les horaires, les prix, ou les services non mentionnes.",
-    "- Les categories disponibles : horaires, livraison, allergens, paiement, parking, reservation, promotion, ingredients, other"
-  );
-
-  return lines.join("\n");
-}
 
 // ============================================================
 // BUILD SYSTEM PROMPT — Prompt structuré prise de commande
@@ -429,7 +392,6 @@ function buildSystemPrompt(
   deliveryText: string,
   servicesText: string,
   offersText: string,
-  faqText: string,
   customer: CustomerContext | null
 ): string {
   // Heure actuelle dans la timezone du restaurant
@@ -708,7 +670,6 @@ ${servicesText}
 ${offersText}
 
 ${customerSection}
-${faqText}
 
 ========================================
 REGLES DE LOGIQUE (OBLIGATOIRES)
@@ -1195,13 +1156,7 @@ export async function buildAiSessionConfig(
     order: { displayOrder: "ASC" },
   });
 
-  // 3. FAQ répondues (base de connaissances)
-  const faqs = await ds.getRepository<Faq>("faqs").find({
-    where: { restaurantId, status: "answered" },
-    order: { askCount: "DESC" },
-  });
-
-  // 4. Client connu ?
+  // 3. Client connu ?
   let customerContext: CustomerContext | null = null;
   if (callerPhone) {
     const customer = await ds.getRepository<Customer>("customers").findOneBy({
@@ -1262,7 +1217,6 @@ export async function buildAiSessionConfig(
   const deliveryText = buildDeliveryText(restaurant);
   const servicesText = buildServicesText(diningServices);
   const offersText = buildOffersText(activeOffers, itemMap);
-  const faqText = buildFaqText(faqs);
 
   const systemPrompt = buildSystemPrompt(
     restaurant,
@@ -1271,7 +1225,6 @@ export async function buildAiSessionConfig(
     deliveryText,
     servicesText,
     offersText,
-    faqText,
     customerContext
   );
 

@@ -13,7 +13,6 @@ import type { MenuCategory } from "./MenuCategory";
 import type { MenuItem } from "./MenuItem";
 import type { Call } from "./Call";
 import type { Order } from "./Order";
-import type { Faq } from "./Faq";
 import type { Reservation } from "./Reservation";
 import type { DiningRoom } from "./DiningRoom";
 import type { DiningTable } from "./DiningTable";
@@ -286,9 +285,6 @@ export class Restaurant {
 
   @OneToMany("orders", "restaurant")
   orders!: Order[];
-
-  @OneToMany("faqs", "restaurant")
-  faqs!: Faq[];
 
   @OneToMany("reservations", "restaurant")
   reservations!: Reservation[];
