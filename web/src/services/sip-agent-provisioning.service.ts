@@ -18,6 +18,7 @@ const ALLORESTO_URL =
 
 const ACCOUNT_NAME = "AlloResto";
 const ACCOUNT_EMAIL = "admin@alloresto.local";
+const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 let cachedAccountId: string | null = null;
 
@@ -27,12 +28,16 @@ async function sipFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string>),
+  };
+  if (SIP_ACCOUNT_API_KEY) {
+    headers["X-API-Key"] = SIP_ACCOUNT_API_KEY;
+  }
   return fetch(`${SIP_AGENT_SERVER_URL}/api${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
     signal: AbortSignal.timeout(10_000),
   });
 }

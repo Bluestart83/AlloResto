@@ -1,6 +1,7 @@
 /**
  * POST /api/faq/import — Bulk import FAQ via proxy
  * Body : { restaurantId, items: [{ question, answer?, category? }] }
+ * Passe le Bearer token de l'agent pour l'auth côté sip-agent-server.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -20,16 +21,20 @@ export async function POST(req: NextRequest) {
 
   const ds = await getDb();
   const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
-  const agentId = restaurant?.agentId;
+  const agentToken = restaurant?.agentApiToken;
 
-  if (!agentId) {
+  if (!agentToken) {
     return NextResponse.json({ error: "Restaurant non provisionné" }, { status: 404 });
   }
 
+  // agentId auto-résolu par le Bearer token côté serveur
   const resp = await fetch(`${SIP_AGENT_SERVER_URL}/api/faqs/import`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agentId, items }),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${agentToken}`,
+    },
+    body: JSON.stringify({ items }),
     signal: AbortSignal.timeout(30_000),
   });
 

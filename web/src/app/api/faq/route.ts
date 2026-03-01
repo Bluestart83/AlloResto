@@ -2,14 +2,12 @@
  * /api/faq/route.ts
  *
  * Proxy vers sip-agent-server /api/faqs
- * Traduit restaurantId → agentId (via la table restaurants)
+ * Traduit restaurantId → agentApiToken (via la table restaurants)
+ * Le token Bearer scope automatiquement l'agentId côté serveur.
  *
- * L'interface AlloResto continue d'utiliser restaurantId,
- * ce proxy fait la traduction transparente.
- *
- * GET    /api/faq?restaurantId=xxx                 → GET  /api/faqs?agentId=yyy
- * GET    /api/faq?restaurantId=xxx&status=pending   → GET  /api/faqs?agentId=yyy&status=pending
- * GET    /api/faq?restaurantId=xxx&for_prompt=true  → GET  /api/faqs?agentId=yyy&for_prompt=true
+ * GET    /api/faq?restaurantId=xxx                 → GET  /api/faqs
+ * GET    /api/faq?restaurantId=xxx&status=pending   → GET  /api/faqs?status=pending
+ * GET    /api/faq?restaurantId=xxx&for_prompt=true  → GET  /api/faqs?for_prompt=true
  * POST   /api/faq                                   → POST /api/faqs
  * PATCH  /api/faq                                   → PUT  /api/faqs/:id
  * DELETE /api/faq?id=xxx                            → DELETE /api/faqs/:id
@@ -22,22 +20,23 @@ import type { Restaurant } from "@/db/entities/Restaurant";
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
 
-async function sipFetch(path: string, init?: RequestInit): Promise<Response> {
+/** Résout restaurantId → agentApiToken */
+async function resolveAgentToken(restaurantId: string): Promise<string | null> {
+  const ds = await getDb();
+  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
+  return restaurant?.agentApiToken || null;
+}
+
+async function sipFetch(path: string, agentToken: string, init?: RequestInit): Promise<Response> {
   return fetch(`${SIP_AGENT_SERVER_URL}/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...init?.headers,
+      "Authorization": `Bearer ${agentToken}`,
+      ...(init?.headers as Record<string, string>),
     },
     signal: AbortSignal.timeout(10_000),
   });
-}
-
-/** Résout restaurantId → agentId */
-async function resolveAgentId(restaurantId: string): Promise<string | null> {
-  const ds = await getDb();
-  const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneBy({ id: restaurantId });
-  return restaurant?.agentId || null;
 }
 
 // ============================================================
@@ -53,16 +52,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "restaurantId required" }, { status: 400 });
   }
 
-  const agentId = await resolveAgentId(restaurantId);
-  if (!agentId) {
+  const token = await resolveAgentToken(restaurantId);
+  if (!token) {
     return NextResponse.json({ error: "Restaurant non provisionné" }, { status: 404 });
   }
 
-  const params = new URLSearchParams({ agentId });
+  // agentId auto-résolu par le Bearer token côté serveur
+  const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (forPrompt) params.set("for_prompt", forPrompt);
+  const qs = params.toString() ? `?${params}` : "";
 
-  const resp = await sipFetch(`/faqs?${params}`);
+  const resp = await sipFetch(`/faqs${qs}`, token);
   const data = await resp.json();
   return NextResponse.json(data, { status: resp.status });
 }
@@ -79,14 +80,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "restaurantId and question required" }, { status: 400 });
   }
 
-  const agentId = await resolveAgentId(restaurantId);
-  if (!agentId) {
+  const token = await resolveAgentToken(restaurantId);
+  if (!token) {
     return NextResponse.json({ error: "Restaurant non provisionné" }, { status: 404 });
   }
 
-  const resp = await sipFetch("/faqs", {
+  // agentId auto-résolu par le Bearer token côté serveur
+  const resp = await sipFetch("/faqs", token, {
     method: "POST",
-    body: JSON.stringify({ agentId, question, category, callerPhone }),
+    body: JSON.stringify({ question, category, callerPhone }),
   });
 
   const data = await resp.json();
@@ -98,17 +100,24 @@ export async function POST(req: NextRequest) {
 // ============================================================
 
 export async function PATCH(req: NextRequest) {
-  const { id, answer, status } = await req.json();
+  const { id, restaurantId, answer, status } = await req.json();
 
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+
+  // Pour PATCH/DELETE on a besoin du token mais pas de restaurantId dans le body côté serveur
+  // Si restaurantId fourni, on l'utilise ; sinon on tente sans token (erreur 401)
+  const token = restaurantId ? await resolveAgentToken(restaurantId) : null;
+  if (!token) {
+    return NextResponse.json({ error: "restaurantId required for auth" }, { status: 400 });
   }
 
   const updateBody: Record<string, any> = {};
   if (answer !== undefined) updateBody.answer = answer;
   if (status) updateBody.status = status;
 
-  const resp = await sipFetch(`/faqs/${id}`, {
+  const resp = await sipFetch(`/faqs/${id}`, token, {
     method: "PUT",
     body: JSON.stringify(updateBody),
   });
@@ -123,12 +132,18 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
+  const restaurantId = req.nextUrl.searchParams.get("restaurantId");
 
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  const resp = await sipFetch(`/faqs/${id}`, { method: "DELETE" });
+  const token = restaurantId ? await resolveAgentToken(restaurantId) : null;
+  if (!token) {
+    return NextResponse.json({ error: "restaurantId required for auth" }, { status: 400 });
+  }
+
+  const resp = await sipFetch(`/faqs/${id}`, token, { method: "DELETE" });
   const data = await resp.json();
   return NextResponse.json(data, { status: resp.status });
 }
