@@ -517,8 +517,8 @@ export default function OrderCart({ categories, items, currency, showMenuIcons, 
               </>
             )}
 
-          </div>
           {children}
+          </div>
         </div>
       </div>
 
