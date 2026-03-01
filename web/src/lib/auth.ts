@@ -31,7 +31,10 @@ async function sendEmail(to: string, subject: string, html: string) {
 
 // ── Better Auth config ──────────────────────────────────────
 export const auth = betterAuth({
-  trustedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  trustedOrigins: [
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+  ],
   database: new Database(process.env.DATABASE_URL || "./database.db"),
   emailAndPassword: {
     enabled: true,

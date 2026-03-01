@@ -10,7 +10,6 @@ import {
   Unique,
 } from "typeorm";
 import type { Restaurant } from "./Restaurant";
-import type { Call } from "./Call";
 import type { Order } from "./Order";
 import type { Reservation } from "./Reservation";
 
@@ -153,9 +152,6 @@ export class Customer {
   updatedAt!: Date;
 
   // --- Relations ---
-  @OneToMany("calls", "customer")
-  calls!: Call[];
-
   @OneToMany("orders", "customer")
   orders!: Order[];
 

@@ -11,7 +11,6 @@ import type { PhoneLine } from "./PhoneLine";
 import type { Customer } from "./Customer";
 import type { MenuCategory } from "./MenuCategory";
 import type { MenuItem } from "./MenuItem";
-import type { Call } from "./Call";
 import type { Order } from "./Order";
 import type { Reservation } from "./Reservation";
 import type { DiningRoom } from "./DiningRoom";
@@ -205,6 +204,9 @@ export class Restaurant {
   @Column({ name: "agent_api_token", type: "varchar", length: 128, nullable: true })
   agentApiToken!: string | null;
 
+  @Column({ name: "agent_public_token", type: "varchar", length: 128, nullable: true })
+  agentPublicToken!: string | null;
+
   @Column({ name: "final_customer_id", type: "varchar", length: 36, nullable: true })
   finalCustomerId!: string | null;
 
@@ -279,9 +281,6 @@ export class Restaurant {
 
   @OneToMany("menu_items", "restaurant")
   menuItems!: MenuItem[];
-
-  @OneToMany("calls", "restaurant")
-  calls!: Call[];
 
   @OneToMany("orders", "restaurant")
   orders!: Order[];

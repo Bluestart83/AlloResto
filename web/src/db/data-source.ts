@@ -5,7 +5,6 @@ import { PhoneLine } from "./entities/PhoneLine";
 import { Customer } from "./entities/Customer";
 import { MenuCategory } from "./entities/MenuCategory";
 import { MenuItem } from "./entities/MenuItem";
-import { Call } from "./entities/Call";
 import { Order } from "./entities/Order";
 import { OrderItem } from "./entities/OrderItem";
 import { Reservation } from "./entities/Reservation";
@@ -28,7 +27,6 @@ const entities = [
   Customer,
   MenuCategory,
   MenuItem,
-  Call,
   Order,
   OrderItem,
   Reservation,

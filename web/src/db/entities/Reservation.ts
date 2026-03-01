@@ -9,7 +9,6 @@ import {
   Index,
 } from "typeorm";
 import type { Restaurant } from "./Restaurant";
-import type { Call } from "./Call";
 import type { Customer } from "./Customer";
 import type { DiningService } from "./DiningService";
 import type { DiningRoom } from "./DiningRoom";
@@ -35,12 +34,9 @@ export class Reservation {
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
+  /** UUID from sip-agent-server CallRecord (not a local FK) */
   @Column({ name: "call_id", type: "varchar", nullable: true })
   callId!: string | null;
-
-  @ManyToOne("calls", { nullable: true })
-  @JoinColumn({ name: "call_id" })
-  call!: Call | null;
 
   @Column({ name: "customer_id", type: "varchar", nullable: true })
   customerId!: string | null;

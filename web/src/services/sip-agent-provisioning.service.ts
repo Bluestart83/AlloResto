@@ -180,7 +180,7 @@ export async function provisionAgent(restaurant: {
     username: string;
     password: string;
   } | null;
-}): Promise<{ agentId: string | null; agentApiToken?: string | null; finalCustomerId: string | null }> {
+}): Promise<{ agentId: string | null; agentApiToken?: string | null; agentPublicToken?: string | null; finalCustomerId: string | null }> {
   try {
     const accountId = await ensureAccount();
 
@@ -236,9 +236,10 @@ export async function provisionAgent(restaurant: {
     const agent = (await agentResp.json()) as {
       id: string;
       apiToken: string;
+      publicToken: string;
     };
     console.log(
-      `[sip-provisioning] Agent created: ${agent.id} (token: ${agent.apiToken})`
+      `[sip-provisioning] Agent created: ${agent.id} (token: ${agent.apiToken}, pk: ${agent.publicToken})`
     );
 
     // Crée la PhoneLine (SIP ou Twilio selon config)
@@ -286,10 +287,10 @@ export async function provisionAgent(restaurant: {
     console.log(
       `[sip-provisioning] ${ALLORESTO_TOOL_DEFINITIONS.length} tools created for agent ${agent.id}`
     );
-    return { agentId: agent.id, agentApiToken: agent.apiToken, finalCustomerId };
+    return { agentId: agent.id, agentApiToken: agent.apiToken, agentPublicToken: agent.publicToken, finalCustomerId };
   } catch (err) {
     console.error("[sip-provisioning] Provisioning failed:", err);
-    return { agentId: null, agentApiToken: null, finalCustomerId: null };
+    return { agentId: null, agentApiToken: null, agentPublicToken: null, finalCustomerId: null };
   }
 }
 

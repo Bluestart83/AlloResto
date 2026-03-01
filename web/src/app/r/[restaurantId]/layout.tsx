@@ -21,7 +21,7 @@ export default async function PublicRestaurantLayout({
     .getRepository<Restaurant>("restaurants")
     .findOneBy({ id: restaurantId });
 
-  const chatEnabled = !!restaurant?.agentApiToken;
+  const chatEnabled = !!restaurant?.agentPublicToken;
 
   return (
     <div className="public-page">
@@ -32,7 +32,7 @@ export default async function PublicRestaurantLayout({
       {chatEnabled && (
         <Script
           src={`${WIDGET_BASE_URL}/widget/chat.js`}
-          data-api-base={`/api/chat/${restaurantId}`}
+          data-agent-token={restaurant.agentPublicToken!}
           data-lang="fr"
           data-position="bottom-right"
           strategy="afterInteractive"

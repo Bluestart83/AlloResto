@@ -7,7 +7,6 @@ import {
   JoinColumn,
 } from "typeorm";
 import type { Restaurant } from "./Restaurant";
-import type { Call } from "./Call";
 
 export type MessageCategory =
   | "callback_request"
@@ -28,12 +27,9 @@ export class Message {
   @JoinColumn({ name: "restaurant_id" })
   restaurant!: Restaurant;
 
+  /** UUID from sip-agent-server CallRecord (not a local FK) */
   @Column({ name: "call_id", type: "varchar", nullable: true })
   callId!: string | null;
-
-  @ManyToOne("calls", { nullable: true })
-  @JoinColumn({ name: "call_id" })
-  call!: Call | null;
 
   @Column({ name: "caller_phone", type: "varchar", length: 20 })
   callerPhone!: string;

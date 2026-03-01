@@ -3,16 +3,21 @@
  *
  * GET /api/stats?restaurantId=xxx
  *   → today's KPIs, hourly breakdown, weekly stats, outcomes, recent calls, top customers
+ *
+ * Calls are fetched from sip-agent-server (source of truth).
+ * Orders & customers are fetched from local DB.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import type { Call } from "@/db/entities/Call";
 import type { Order } from "@/db/entities/Order";
 import type { Customer } from "@/db/entities/Customer";
 import type { Restaurant } from "@/db/entities/Restaurant";
 import { MoreThanOrEqual } from "typeorm";
 import { getExchangeRate } from "@/services/exchange-rate.service";
+
+const SIP_AGENT_SERVER_URL =
+  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -25,6 +30,45 @@ function startOfWeek(d: Date) {
 }
 
 const DAY_NAMES = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
+/** Map sip-agent-server generic outcomes → AlloResto specific outcomes */
+function mapOutcome(outcome: string, toolCalls?: { name: string }[]): string {
+  if (outcome === "in_progress") return "in_progress";
+  if (outcome === "abandoned") return "abandoned";
+  if (outcome === "error" || outcome === "no_balance") return "error";
+  const toolNames = (toolCalls || []).map((tc) => tc.name);
+  if (toolNames.includes("confirm_order")) return "order_placed";
+  if (toolNames.includes("confirm_reservation")) return "reservation_placed";
+  if (toolNames.includes("leave_message")) return "message_left";
+  return "info_only";
+}
+
+/** Fetch calls from sip-agent-server with date range filter */
+async function fetchCalls(
+  agentToken: string,
+  from: Date,
+  limit = 200,
+): Promise<any[]> {
+  const url = new URL("/api/calls", SIP_AGENT_SERVER_URL);
+  url.searchParams.set("from", from.toISOString());
+  url.searchParams.set("limit", String(limit));
+
+  try {
+    const resp = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${agentToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) return [];
+    const calls: any[] = await resp.json();
+    // Map outcomes
+    return calls.map((c: any) => ({
+      ...c,
+      outcome: mapOutcome(c.outcome, c.toolCalls),
+    }));
+  } catch {
+    return [];
+  }
+}
 
 export async function GET(req: NextRequest) {
   const ds = await getDb();
@@ -39,18 +83,23 @@ export async function GET(req: NextRequest) {
   const weekStart = startOfWeek(now);
 
   // ---- Restaurant currency + display exchange rate ----
-  // Costs are stored in BILLING_CURRENCY (EUR). If restaurant locale differs, provide fx for display.
   const restaurant = await ds.getRepository<Restaurant>("restaurants").findOneByOrFail({ id: restaurantId });
   const billingCurrency = process.env.NEXT_PUBLIC_BILLING_CURRENCY!;
   const displayCurrency = restaurant.currency;
   const displayFx = displayCurrency === billingCurrency ? 1 : await getExchangeRate(displayCurrency);
 
-  // ---- Calls today ----
-  const callsToday = await ds.getRepository<Call>("calls").find({
-    where: { restaurantId, startedAt: MoreThanOrEqual(todayStart) },
-    order: { startedAt: "DESC" },
-  });
+  // ---- Fetch calls from sip-agent-server ----
+  const agentToken = restaurant.agentApiToken;
+  let callsToday: any[] = [];
+  let callsWeek: any[] = [];
 
+  if (agentToken) {
+    // Fetch week calls (includes today)
+    callsWeek = await fetchCalls(agentToken, weekStart);
+    callsToday = callsWeek.filter((c: any) => new Date(c.startedAt) >= todayStart);
+  }
+
+  // ---- Calls today stats ----
   const totalCalls = callsToday.length;
   const outcomes: Record<string, number> = {};
   let totalDurationSec = 0;
@@ -72,15 +121,15 @@ export async function GET(req: NextRequest) {
     hourlyMap[h].calls++;
   }
 
-  // Max concurrent per hour (simple: count overlapping calls)
+  // Max concurrent per hour
   for (let h = 0; h < 24; h++) {
     if (!hourlyMap[h]) hourlyMap[h] = { calls: 0, concurrent: 0 };
-    const hourCalls = callsToday.filter((c) => new Date(c.startedAt).getHours() === h);
+    const hourCalls = callsToday.filter((c: any) => new Date(c.startedAt).getHours() === h);
     let maxConc = 0;
     for (const c of hourCalls) {
       const start = new Date(c.startedAt).getTime();
       const end = c.endedAt ? new Date(c.endedAt).getTime() : start + (c.durationSec || 0) * 1000;
-      const conc = hourCalls.filter((other) => {
+      const conc = hourCalls.filter((other: any) => {
         const oStart = new Date(other.startedAt).getTime();
         const oEnd = other.endedAt ? new Date(other.endedAt).getTime() : oStart + (other.durationSec || 0) * 1000;
         return oStart < end && oEnd > start;
@@ -135,9 +184,6 @@ export async function GET(req: NextRequest) {
   }));
 
   // ---- Weekly stats ----
-  const callsWeek = await ds.getRepository<Call>("calls").find({
-    where: { restaurantId, startedAt: MoreThanOrEqual(weekStart) },
-  });
   const ordersWeek = await ds.getRepository<Order>("orders").find({
     where: { restaurantId, createdAt: MoreThanOrEqual(weekStart) },
   });
@@ -156,7 +202,6 @@ export async function GET(req: NextRequest) {
     weeklyMap[dayName].revenue += Number(o.total) || 0;
   }
 
-  // Order: Lun, Mar, Mer, Jeu, Ven, Sam, Dim
   const weeklyData = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((day) => ({
     day,
     calls: weeklyMap[day].calls,
@@ -174,7 +219,7 @@ export async function GET(req: NextRequest) {
   ];
 
   // ---- Recent calls (last 10) ----
-  const recentCalls = callsToday.slice(0, 10).map((c) => ({
+  const recentCalls = callsToday.slice(0, 10).map((c: any) => ({
     id: c.id,
     callerNumber: c.callerNumber,
     customerName: null as string | null,
@@ -186,7 +231,7 @@ export async function GET(req: NextRequest) {
     time: new Date(c.startedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
   }));
 
-  // Enrich with order data
+  // Enrich with order data (orders reference sip-agent-server callId)
   for (const rc of recentCalls) {
     const order = ordersToday.find((o) => o.callId === rc.id);
     if (order) {
@@ -214,13 +259,7 @@ export async function GET(req: NextRequest) {
       else if (diff === 1) lastOrder = "Hier";
       else lastOrder = `Il y a ${diff}j`;
     }
-    return {
-      name,
-      phone,
-      orders: c.totalOrders,
-      spent: Number(c.totalSpent) || 0,
-      lastOrder,
-    };
+    return { name, phone, orders: c.totalOrders, spent: Number(c.totalSpent) || 0, lastOrder };
   });
 
   // ---- Computed KPIs ----
@@ -229,9 +268,7 @@ export async function GET(req: NextRequest) {
   const avgDistance = distanceCount > 0 ? Math.round((totalDistanceKm / distanceCount) * 10) / 10 : 0;
   const maxConcurrent = Math.max(...hourlyData.map((h) => h.concurrent), 0);
   const totalMinutes = Math.round(totalDurationSec / 60);
-  const costToday = Math.round((totalCostTelecom + totalCostAi) * 100) / 100;
 
-  // Token totals
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   for (const c of callsToday) {
@@ -239,15 +276,9 @@ export async function GET(req: NextRequest) {
     totalOutputTokens += c.outputTokens || 0;
   }
 
-  // Unique callers today
-  const uniqueCallers = new Set(callsToday.map((c) => c.callerNumber)).size;
+  const uniqueCallers = new Set(callsToday.map((c: any) => c.callerNumber)).size;
+  const totalCustomers = await ds.getRepository<Customer>("customers").count({ where: { restaurantId } });
 
-  // Total customers for this restaurant
-  const totalCustomers = await ds.getRepository<Customer>("customers").count({
-    where: { restaurantId },
-  });
-
-  // Convertir les couts de BILLING_CURRENCY vers devise d'affichage restaurant
   const fx = displayFx;
   const costTodayDisplay = Math.round((totalCostTelecom + totalCostAi) * fx * 100) / 100;
   const costTodayAiDisplay = Math.round(totalCostAi * fx * 100) / 100;

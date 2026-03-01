@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
   // Auto-provision agent + FinalCustomer dans sip-agent-server
   const sip = await loadSipCreds(saved.id);
-  const { agentId, agentApiToken, finalCustomerId } = await provisionAgent({
+  const { agentId, agentApiToken, agentPublicToken, finalCustomerId } = await provisionAgent({
     id: saved.id,
     name: saved.name,
     aiVoice: saved.aiVoice,
@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
   if (agentId || finalCustomerId) {
     if (agentId) saved.agentId = agentId;
     if (agentApiToken) saved.agentApiToken = agentApiToken;
+    if (agentPublicToken) saved.agentPublicToken = agentPublicToken;
     if (finalCustomerId) saved.finalCustomerId = finalCustomerId;
     await ds.getRepository<Restaurant>("restaurants").save(saved);
   }
@@ -110,7 +111,7 @@ export async function PATCH(req: NextRequest) {
   // Pas encore d'agent → provisionner si sipEnabled OU chatEnabled
   if (!hadAgent && !saved.agentId && (saved.sipEnabled || saved.chatEnabled)) {
     const sip = await loadSipCreds(saved.id);
-    const { agentId, agentApiToken, finalCustomerId } = await provisionAgent({
+    const { agentId, agentApiToken, agentPublicToken, finalCustomerId } = await provisionAgent({
       id: saved.id,
       name: saved.name,
       aiVoice: saved.aiVoice,
@@ -132,6 +133,7 @@ export async function PATCH(req: NextRequest) {
     if (agentId || finalCustomerId) {
       if (agentId) saved.agentId = agentId;
       if (agentApiToken) saved.agentApiToken = agentApiToken;
+      if (agentPublicToken) saved.agentPublicToken = agentPublicToken;
       if (finalCustomerId) saved.finalCustomerId = finalCustomerId;
       await ds.getRepository<Restaurant>("restaurants").save(saved);
     }

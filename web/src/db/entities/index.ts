@@ -3,7 +3,6 @@ export { PhoneLine } from "./PhoneLine";
 export { Customer } from "./Customer";
 export { MenuCategory } from "./MenuCategory";
 export { MenuItem } from "./MenuItem";
-export { Call, type CallOutcome } from "./Call";
 export { Order, type OrderStatus, type OrderType, type PaymentMethod } from "./Order";
 export { OrderItem } from "./OrderItem";
 export { ExternalLoad } from "./ExternalLoad";

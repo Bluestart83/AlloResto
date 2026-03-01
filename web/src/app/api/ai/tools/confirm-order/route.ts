@@ -19,7 +19,6 @@ import { getDb } from "@/lib/db";
 import type { Order } from "@/db/entities/Order";
 import type { OrderItem } from "@/db/entities/OrderItem";
 import type { Customer } from "@/db/entities/Customer";
-import type { Call } from "@/db/entities/Call";
 import { scheduleOrder } from "@/services/planning-engine.service";
 import { classifyOrderSize } from "@/types/planning";
 

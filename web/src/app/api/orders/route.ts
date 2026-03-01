@@ -3,7 +3,6 @@ import { getDb } from "@/lib/db";
 import type { Order } from "@/db/entities/Order";
 import type { OrderItem } from "@/db/entities/OrderItem";
 import type { Customer } from "@/db/entities/Customer";
-import type { Call } from "@/db/entities/Call";
 import type { Restaurant } from "@/db/entities/Restaurant";
 import { scheduleOrder } from "@/services/planning-engine.service";
 import { classifyOrderSize } from "@/types/planning";
@@ -78,14 +77,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 3. Mettre à jour l'appel
-  if (orderData.callId) {
-    await ds.getRepository<Call>("calls").update(orderData.callId, {
-      outcome: "order_placed",
-    });
-  }
-
-  // 4. Mettre à jour les stats du client
+  // 3. Mettre à jour les stats du client
   if (orderData.customerId) {
     const customer = await ds.getRepository<Customer>("customers").findOneBy({
       id: orderData.customerId,
