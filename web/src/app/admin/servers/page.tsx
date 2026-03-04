@@ -4,6 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 
 type PushState = "idle" | "pushing" | "done" | "error";
 
+interface PhoneLineInfo {
+  id: string;
+  phoneNumber: string;
+  provider: string;
+  sipDomain: string | null;
+}
+
 interface AgentInfo {
   id: string;
   name: string;
@@ -11,6 +18,7 @@ interface AgentInfo {
   isActive: boolean;
   pauseReason: string | null;
   externalSessionUrl: string | null;
+  phoneLines?: PhoneLineInfo[];
 }
 
 interface BridgeInfo {
@@ -24,6 +32,7 @@ export default function ServersPage() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [bridgeMap, setBridgeMap] = useState<Record<string, BridgeInfo>>({});
   const [activeCallsMap, setActiveCallsMap] = useState<Record<string, number>>({});
+  const [sipStatusMap, setSipStatusMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [serverOnline, setServerOnline] = useState(false);
   const [pushState, setPushState] = useState<PushState>("idle");
@@ -42,6 +51,7 @@ export default function ServersPage() {
         }
         setBridgeMap(map);
         setActiveCallsMap(data.activeCalls || {});
+        setSipStatusMap(data.sipStatus || {});
       }
     } catch {
       // ignore
@@ -155,6 +165,10 @@ export default function ServersPage() {
               {agents.map((a) => {
                 const bridge = bridgeMap[a.id];
                 const calls = activeCallsMap[a.id] || 0;
+                // Kamailio SIP status: check if any phone line is registered
+                const phoneLines = a.phoneLines || [];
+                const sipRegisteredLines = phoneLines.filter((pl) => sipStatusMap[pl.id]);
+                const hasSipLines = phoneLines.some((pl) => pl.sipDomain);
                 return (
                   <tr key={a.id}>
                     <td>
@@ -203,10 +217,22 @@ export default function ServersPage() {
                             Unregistered
                           </span>
                         )
+                      ) : hasSipLines ? (
+                        sipRegisteredLines.length > 0 ? (
+                          <span className="badge bg-success">
+                            <i className="bi bi-telephone-fill me-1"></i>
+                            Registered ({sipRegisteredLines.length}/{phoneLines.length})
+                          </span>
+                        ) : (
+                          <span className="badge bg-danger">
+                            <i className="bi bi-telephone-x me-1"></i>
+                            Unregistered
+                          </span>
+                        )
                       ) : (
                         <span className="badge bg-light text-muted">
                           <i className="bi bi-telephone me-1"></i>
-                          Offline
+                          N/A
                         </span>
                       )}
                     </td>

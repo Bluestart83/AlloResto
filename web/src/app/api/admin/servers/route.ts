@@ -49,6 +49,7 @@ export async function GET() {
   let agents: AgentInfo[] = [];
   let bridges: BridgeInfo[] = [];
   let activeCalls: Record<string, number> = {};
+  let sipStatus: Record<string, boolean> = {};
   let serverOnline = false;
 
   try {
@@ -72,10 +73,11 @@ export async function GET() {
       const data = await bridgesResp.json();
       bridges = data.bridges || [];
       activeCalls = data.activeCalls || {};
+      sipStatus = data.sipStatus || {};
     }
   } catch {
     // sip-agent-server is offline
   }
 
-  return NextResponse.json({ agents, bridges, activeCalls, serverOnline });
+  return NextResponse.json({ agents, bridges, activeCalls, sipStatus, serverOnline });
 }
