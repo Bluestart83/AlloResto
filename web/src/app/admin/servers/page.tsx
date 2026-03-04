@@ -9,6 +9,7 @@ interface PhoneLineInfo {
   phoneNumber: string;
   provider: string;
   sipDomain: string | null;
+  sipRegistered: boolean | null;
 }
 
 interface AgentInfo {
@@ -32,7 +33,6 @@ export default function ServersPage() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [bridgeMap, setBridgeMap] = useState<Record<string, BridgeInfo>>({});
   const [activeCallsMap, setActiveCallsMap] = useState<Record<string, number>>({});
-  const [sipStatusMap, setSipStatusMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [serverOnline, setServerOnline] = useState(false);
   const [pushState, setPushState] = useState<PushState>("idle");
@@ -51,7 +51,6 @@ export default function ServersPage() {
         }
         setBridgeMap(map);
         setActiveCallsMap(data.activeCalls || {});
-        setSipStatusMap(data.sipStatus || {});
       }
     } catch {
       // ignore
@@ -165,9 +164,8 @@ export default function ServersPage() {
               {agents.map((a) => {
                 const bridge = bridgeMap[a.id];
                 const calls = activeCallsMap[a.id] || 0;
-                // Kamailio SIP status: check if any phone line is registered
                 const phoneLines = a.phoneLines || [];
-                const sipRegisteredLines = phoneLines.filter((pl) => sipStatusMap[pl.id]);
+                const sipRegisteredLines = phoneLines.filter((pl) => pl.sipRegistered === true);
                 const hasSipLines = phoneLines.some((pl) => pl.sipDomain);
                 return (
                   <tr key={a.id}>
