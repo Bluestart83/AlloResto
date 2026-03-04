@@ -43,6 +43,14 @@ ALLORESTO_URL=http://localhost:3000 \
 npx tsx scripts/seed-alloresto.ts
 ```
 
+## Mise en prod — Cloudflare
+
+Si `SIP_AGENT_SERVER_URL` pointe vers un domaine protege par Cloudflare (ex: `https://iagent.nolimitdev.net`),
+il faut **whitelister l'IP publique du serveur AlloResto** dans Cloudflare pour eviter le blocage WAF/Bot Protection
+sur les appels serveur-to-serveur.
+
+**Cloudflare Dashboard** → Security → WAF → Tools → IP Access Rules → ajouter l'IP du serveur → action **Allow**.
+
 ## Variables d'environnement
 
 | Variable | Defaut | Description |
