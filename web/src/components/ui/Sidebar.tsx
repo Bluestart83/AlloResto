@@ -21,7 +21,7 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
     { href: "/admin/customers", icon: "bi-people", label: "Clients" },
     { href: "/admin/import", icon: "bi-cloud-download", label: "Import resto" },
     { href: "/admin/servers", icon: "bi-robot", label: "Agents Vocaux" },
-    { href: "http://localhost:5173", icon: "bi-speedometer2", label: "Plateforme IA" },
+    { href: `${process.env.NEXT_PUBLIC_SIP_AGENT_WEB_URL || "http://localhost:5173"}`, icon: "bi-speedometer2", label: "Plateforme IA" },
   ];
 
   const restaurantItems = restaurantId

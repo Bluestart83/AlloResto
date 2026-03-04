@@ -16,7 +16,8 @@ RUN npm install packages/billing-ui/nld-billing-ui-*.tgz
 COPY web/ .
 
 # Dummy env for build only (real values injected at runtime via docker-compose env_file)
-ENV GOOGLE_MAPS_API_KEY=build-placeholder
+ARG GOOGLE_MAPS_API_KEY=build-placeholder
+ENV GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY
 
 RUN npx next build
 

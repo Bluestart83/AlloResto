@@ -1,6 +1,6 @@
 # Quick Deploy — AlloResto (VPS)
 
-AlloResto tourne dans le docker-compose de sip-agent-server (SQLite, volume sur disque).
+AlloResto est un service dans le docker-compose de sip-agent-server. Les URLs serveur (API) sont Docker internes, les URLs `NEXT_PUBLIC_*` sont publiques (browser).
 
 ## 1. Clone
 
@@ -11,44 +11,36 @@ mkdir -p packages
 git clone git@gitlab.com:arnaud.liguori/corallospeaking.git packages/billing-ui
 ```
 
-Structure attendue :
+## 2. .env
+
+Le `.env` d'AlloResto sert de base. Le docker-compose.yml override les URLs Docker internes automatiquement.
+
+Variables a configurer dans `.env` :
 
 ```
-~/
-  sip-agent-server/
-  AlloResto/
-  packages/billing-ui/
+BETTER_AUTH_SECRET=<openssl rand -base64 32>
+BETTER_AUTH_URL=https://resto.nolimitdev.net
+NEXT_PUBLIC_APP_URL=https://resto.nolimitdev.net
+NEXT_PUBLIC_SIP_AGENT_WEB_URL=https://iagent.nolimitdev.net/admin/platform/
+SIP_ACCOUNT_API_KEY=acc_xxxxxxxxxxxxxxxxxxxx
+ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
 
-## 2. Copier le .env
+Le compose ajoute automatiquement :
+- `SIP_AGENT_SERVER_URL=http://sip-agent-server-api:4000`
+- `ALLORESTO_CALLBACK_URL=http://alloresto:3000`
+- `DATABASE_URL=/data/database.db`
 
-```bash
-scp AlloResto/.env user@vps:~/AlloResto/.env
-```
-
-Adapter les URLs :
-
-```
-DATABASE_TYPE=sqlite
-DATABASE_URL=/data/database.db
-SIP_AGENT_SERVER_URL=http://sip-agent-server-api:4000
-SIP_AGENT_WEB_URL=http://sip-agent-server-web:5173
-NODE_ENV=production
-```
-
-## 3. Lancer
-
-AlloResto est un service dans le docker-compose de sip-agent-server :
+## 3. Build + lancer
 
 ```bash
 cd sip-agent-server
-docker compose -f docker/docker-compose.yml up --build -d
+docker build -t alloresto:prod ../AlloResto
+docker compose up -d
 ```
-
-La base SQLite est persistee dans `sip-agent-server/docker/data/alloresto/database.db`.
 
 ## 4. Verifier
 
 ```bash
-curl http://localhost:3000
+curl https://resto.nolimitdev.net
 ```

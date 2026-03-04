@@ -32,6 +32,7 @@ async function sendEmail(to: string, subject: string, html: string) {
 // ── Better Auth config ──────────────────────────────────────
 export const auth = betterAuth({
   trustedOrigins: [
+    process.env.BETTER_AUTH_URL || "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3001",
   ],

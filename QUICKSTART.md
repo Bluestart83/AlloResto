@@ -51,7 +51,6 @@ npx tsx scripts/seed-alloresto.ts
 | `OPENAI_API_KEY` | | Cle OpenAI (scan menu) |
 | `GOOGLE_MAPS_API_KEY` | | Geocodage + distance |
 | `SIP_AGENT_SERVER_URL` | `http://localhost:4000` | API sip-agent-server |
-| `NEXT_PUBLIC_BILLING_URL` | `http://localhost:5173` | Web UI facturation |
 | `ENCRYPTION_KEY` | | AES-256 pour SIP passwords (`openssl rand -hex 32`) |
 | `BETTER_AUTH_SECRET` | | Secret Better Auth (`openssl rand -base64 32`) |
 | `BETTER_AUTH_URL` | `http://localhost:3000` | URL publique Better Auth |
