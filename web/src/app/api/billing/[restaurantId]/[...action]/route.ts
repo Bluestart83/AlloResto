@@ -7,6 +7,7 @@ import type { Restaurant } from "@/db/entities/Restaurant";
 
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 /**
  * Billing proxy: /api/billing/:restaurantId/:action* → sip-agent-server
@@ -62,7 +63,10 @@ async function proxyRequest(
   // ── Forward request ──
   const fetchOpts: RequestInit = {
     method: req.method,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(SIP_ACCOUNT_API_KEY ? { "X-API-Key": SIP_ACCOUNT_API_KEY } : {}),
+    },
     signal: AbortSignal.timeout(15000),
   };
 

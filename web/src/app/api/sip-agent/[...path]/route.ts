@@ -5,6 +5,7 @@ import { ROLE_ADMIN } from "@/lib/roles";
 
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 const ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
@@ -39,6 +40,7 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
     method: req.method,
     headers: {
       "Content-Type": "application/json",
+      ...(SIP_ACCOUNT_API_KEY ? { "X-API-Key": SIP_ACCOUNT_API_KEY } : {}),
     },
     signal: AbortSignal.timeout(15000),
   };

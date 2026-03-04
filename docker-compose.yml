@@ -1,0 +1,44 @@
+# ── AlloResto — App cliente autonome ──
+# Usage: docker compose up -d
+#
+# AlloResto est une app cliente de la plateforme sip-agent-server.
+# Elle appelle la plateforme via l'URL publique https://iagent.nolimitdev.net
+# avec son X-API-Key, comme n'importe quel client externe (VAPI, etc.).
+#
+# Aucune dependance Docker vers sip-agent-server.
+#
+# .env requis : voir .env.example
+# Variables critiques :
+#   SIP_AGENT_SERVER_URL=https://iagent.nolimitdev.net
+#   SIP_ACCOUNT_API_KEY=acc_xxx
+#   ALLORESTO_CALLBACK_URL=https://resto.nolimitdev.net
+#   CLOUDFLARE_TUNNEL_TOKEN=<token du tunnel "alloresto">
+
+services:
+  alloresto:
+    image: alloresto:prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_TYPE: sqlite
+      DATABASE_URL: /data/database.db
+      NODE_ENV: production
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # ── Cloudflare Tunnel — AlloResto (resto.nolimitdev.net) ──
+  # Prerequis : creer un tunnel "alloresto" dans le dashboard Cloudflare.
+  # Route a configurer dans le dashboard (Zero Trust > Tunnels > Public Hostnames) :
+  #   resto.nolimitdev.net * → http://alloresto:3000
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - alloresto
+    restart: unless-stopped

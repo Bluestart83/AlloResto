@@ -7,6 +7,14 @@ import type { Restaurant } from "@/db/entities/Restaurant";
 
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
+
+function apiHeaders(): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    ...(SIP_ACCOUNT_API_KEY ? { "X-API-Key": SIP_ACCOUNT_API_KEY } : {}),
+  };
+}
 
 /**
  * Subscriptions proxy: /api/subscriptions/:restaurantId → sip-agent-server
@@ -59,7 +67,7 @@ export async function GET(
   try {
     const resp = await fetch(
       `${SIP_AGENT_SERVER_URL}/api/final-customers/${restaurant.finalCustomerId}/subscriptions`,
-      { signal: AbortSignal.timeout(10_000) }
+      { headers: apiHeaders(), signal: AbortSignal.timeout(10_000) }
     );
     const data = await resp.json();
     return NextResponse.json(data, { status: resp.status });
@@ -86,7 +94,7 @@ export async function POST(
       `${SIP_AGENT_SERVER_URL}/api/final-customers/${restaurant.finalCustomerId}/subscriptions`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body,
         signal: AbortSignal.timeout(10_000),
       }

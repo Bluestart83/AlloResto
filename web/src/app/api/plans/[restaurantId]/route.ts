@@ -7,8 +7,16 @@ import type { Restaurant } from "@/db/entities/Restaurant";
 
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 const ALLORESTO_ACCOUNT_NAME = "AlloResto";
+
+function apiHeaders(): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    ...(SIP_ACCOUNT_API_KEY ? { "X-API-Key": SIP_ACCOUNT_API_KEY } : {}),
+  };
+}
 
 // GET /api/plans/:restaurantId — liste les plans disponibles pour le restaurant
 export async function GET(
@@ -40,7 +48,7 @@ export async function GET(
     // Récupérer l'accountId AlloResto
     const accountsResp = await fetch(
       `${SIP_AGENT_SERVER_URL}/api/accounts`,
-      { signal: AbortSignal.timeout(10_000) }
+      { headers: apiHeaders(), signal: AbortSignal.timeout(10_000) }
     );
     if (!accountsResp.ok) {
       return NextResponse.json({ error: "Service indisponible" }, { status: 502 });
@@ -54,7 +62,7 @@ export async function GET(
     // Lister les plans actifs de cet account
     const plansResp = await fetch(
       `${SIP_AGENT_SERVER_URL}/api/plans?accountId=${account.id}`,
-      { signal: AbortSignal.timeout(10_000) }
+      { headers: apiHeaders(), signal: AbortSignal.timeout(10_000) }
     );
     const plans = await plansResp.json();
     return NextResponse.json(plans, { status: plansResp.status });

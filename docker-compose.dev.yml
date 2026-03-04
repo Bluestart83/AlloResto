@@ -1,0 +1,31 @@
+# ── AlloResto — Dev local ──
+# Usage: docker compose -f docker-compose.dev.yml up
+#
+# Pas de Cloudflare tunnel en dev.
+# sip-agent-server doit tourner en local sur 127.0.0.1:4000
+# (via son propre docker-compose.dev.yml ou en bare metal).
+#
+# .env requis :
+#   SIP_AGENT_SERVER_URL=http://host.docker.internal:4000
+#   SIP_ACCOUNT_API_KEY=acc_xxx
+
+services:
+  alloresto:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    environment:
+      DATABASE_TYPE: sqlite
+      DATABASE_URL: /data/database.db
+      SIP_AGENT_SERVER_URL: http://host.docker.internal:4000
+      NODE_ENV: development
+    volumes:
+      - ./data:/data
+      - ./web/src:/app/src
+      - ./web/public:/app/public

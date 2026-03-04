@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { ROLE_ADMIN } from "@/lib/roles";
 import { getDb } from "@/lib/db";
 import type { PhoneLine } from "@/db/entities/PhoneLine";
 import type { Restaurant } from "@/db/entities/Restaurant";
@@ -10,9 +13,19 @@ import { provisionAgent, updateAgent, upsertPhoneLine } from "@/services/sip-age
  * Retourne la phone line d'un restaurant (sans le mot de passe en clair).
  */
 export async function GET(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
   const restaurantId = req.nextUrl.searchParams.get("restaurantId");
   if (!restaurantId) {
     return NextResponse.json({ error: "restaurantId requis" }, { status: 400 });
+  }
+
+  const user = session.user as Record<string, unknown>;
+  if (user.role !== ROLE_ADMIN && user.restaurantId !== restaurantId) {
+    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
   }
 
   const ds = await getDb();
@@ -48,6 +61,14 @@ export async function GET(req: NextRequest) {
  * Crée ou met à jour la phone line + sipBridge d'un restaurant.
  */
 export async function PUT(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+  if (session.user.role !== ROLE_ADMIN) {
+    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+  }
+
   const body = await req.json();
   const {
     restaurantId,

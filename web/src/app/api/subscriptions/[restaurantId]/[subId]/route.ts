@@ -7,6 +7,7 @@ import type { Restaurant } from "@/db/entities/Restaurant";
 
 const SIP_AGENT_SERVER_URL =
   process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 // DELETE /api/subscriptions/:restaurantId/:subId — annuler une souscription
 export async function DELETE(
@@ -39,6 +40,10 @@ export async function DELETE(
       `${SIP_AGENT_SERVER_URL}/api/subscriptions/${subId}`,
       {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(SIP_ACCOUNT_API_KEY ? { "X-API-Key": SIP_ACCOUNT_API_KEY } : {}),
+        },
         signal: AbortSignal.timeout(10_000),
       }
     );
