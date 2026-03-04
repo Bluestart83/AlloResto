@@ -52,29 +52,44 @@ export async function GET() {
   let serverOnline = false;
 
   try {
+    console.log("[admin/servers] Fetching from:", SIP_AGENT_SERVER_URL);
+    console.log("[admin/servers] API key present:", !!SIP_ACCOUNT_API_KEY, "length:", SIP_ACCOUNT_API_KEY.length);
+    console.log("[admin/servers] Headers:", JSON.stringify(apiHeaders()));
+
     const [agentsResp, bridgesResp] = await Promise.all([
       fetch(`${SIP_AGENT_SERVER_URL}/api/agents`, {
         headers: apiHeaders(),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(5000),
       }),
       fetch(`${SIP_AGENT_SERVER_URL}/api/bridges`, {
         headers: apiHeaders(),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(5000),
       }),
     ]);
 
+    console.log("[admin/servers] agents response:", agentsResp.status, agentsResp.statusText);
+    console.log("[admin/servers] bridges response:", bridgesResp.status, bridgesResp.statusText);
+
     if (agentsResp.ok) {
       agents = await agentsResp.json();
+      console.log("[admin/servers] agents count:", agents.length);
       serverOnline = true;
+    } else {
+      const text = await agentsResp.text();
+      console.log("[admin/servers] agents error body:", text.substring(0, 500));
     }
 
     if (bridgesResp.ok) {
       const data = await bridgesResp.json();
       bridges = data.bridges || [];
       activeCalls = data.activeCalls || {};
+      console.log("[admin/servers] bridges count:", bridges.length);
+    } else {
+      const text = await bridgesResp.text();
+      console.log("[admin/servers] bridges error body:", text.substring(0, 500));
     }
-  } catch {
-    // sip-agent-server is offline
+  } catch (err) {
+    console.error("[admin/servers] FETCH ERROR:", err);
   }
 
   return NextResponse.json({ agents, bridges, activeCalls, serverOnline });
