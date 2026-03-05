@@ -196,43 +196,51 @@ export default function ServersPage() {
                       )}
                     </td>
                     <td>
-                      {bridge ? (
-                        bridge.sipRegistered ? (
-                          <>
-                            <span className="badge bg-success">
-                              <i className="bi bi-telephone-fill me-1"></i>
-                              Registered
+                      {(() => {
+                        const sipLines = phoneLines.filter((pl) => pl.sipDomain);
+                        const tooltip = sipLines.length > 0
+                          ? sipLines.map((pl) => `${pl.phoneNumber || pl.id.slice(0, 8)} : ${pl.sipRegistered ? "On" : "Off"}`).join("\n")
+                          : "";
+                        if (bridge) {
+                          return bridge.sipRegistered ? (
+                            <>
+                              <span className="badge bg-success" title={tooltip} style={{ cursor: "default" }}>
+                                <i className="bi bi-telephone-fill me-1"></i>
+                                Registered
+                              </span>
+                              {bridge.lastCodec && (
+                                <small className="text-muted ms-1">
+                                  {/^PCM[AU]$/i.test(bridge.lastCodec) ? `G.711 (${bridge.lastCodec})` : bridge.lastCodec}
+                                </small>
+                              )}
+                            </>
+                          ) : (
+                            <span className="badge bg-danger" title={tooltip} style={{ cursor: "default" }}>
+                              <i className="bi bi-telephone-x me-1"></i>
+                              Unregistered
                             </span>
-                            {bridge.lastCodec && (
-                              <small className="text-muted ms-1">
-                                {/^PCM[AU]$/i.test(bridge.lastCodec) ? `G.711 (${bridge.lastCodec})` : bridge.lastCodec}
-                              </small>
-                            )}
-                          </>
-                        ) : (
-                          <span className="badge bg-danger">
-                            <i className="bi bi-telephone-x me-1"></i>
-                            Unregistered
+                          );
+                        }
+                        if (hasSipLines) {
+                          return sipRegisteredLines.length > 0 ? (
+                            <span className="badge bg-success" title={tooltip} style={{ cursor: "default" }}>
+                              <i className="bi bi-telephone-fill me-1"></i>
+                              Registered ({sipRegisteredLines.length}/{phoneLines.length})
+                            </span>
+                          ) : (
+                            <span className="badge bg-danger" title={tooltip} style={{ cursor: "default" }}>
+                              <i className="bi bi-telephone-x me-1"></i>
+                              Unregistered
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="badge bg-light text-muted">
+                            <i className="bi bi-telephone me-1"></i>
+                            N/A
                           </span>
-                        )
-                      ) : hasSipLines ? (
-                        sipRegisteredLines.length > 0 ? (
-                          <span className="badge bg-success">
-                            <i className="bi bi-telephone-fill me-1"></i>
-                            Registered ({sipRegisteredLines.length}/{phoneLines.length})
-                          </span>
-                        ) : (
-                          <span className="badge bg-danger">
-                            <i className="bi bi-telephone-x me-1"></i>
-                            Unregistered
-                          </span>
-                        )
-                      ) : (
-                        <span className="badge bg-light text-muted">
-                          <i className="bi bi-telephone me-1"></i>
-                          N/A
-                        </span>
-                      )}
+                        );
+                      })()}
                     </td>
                   </tr>
                 );
