@@ -5,8 +5,8 @@ import { ROLE_ADMIN } from "@/lib/roles";
 import { getDb } from "@/lib/db";
 import type { Restaurant } from "@/db/entities/Restaurant";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 const ALLORESTO_ACCOUNT_NAME = "AlloResto";
@@ -47,7 +47,7 @@ export async function GET(
   try {
     // Récupérer l'accountId AlloResto
     const accountsResp = await fetch(
-      `${SIP_AGENT_SERVER_URL}/api/accounts`,
+      `${SIP_AGENT_INTERNAL_URL}/api/accounts`,
       { headers: apiHeaders(), signal: AbortSignal.timeout(10_000) }
     );
     if (!accountsResp.ok) {
@@ -61,7 +61,7 @@ export async function GET(
 
     // Lister les plans actifs de cet account
     const plansResp = await fetch(
-      `${SIP_AGENT_SERVER_URL}/api/plans?accountId=${account.id}`,
+      `${SIP_AGENT_INTERNAL_URL}/api/plans?accountId=${account.id}`,
       { headers: apiHeaders(), signal: AbortSignal.timeout(10_000) }
     );
     const plans = await plansResp.json();

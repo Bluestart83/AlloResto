@@ -3,8 +3,8 @@
 import { getDb } from "@/lib/db";
 import type { Restaurant } from "@/db/entities/Restaurant";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 
 async function resolveAgentToken(restaurantId: string): Promise<string | null> {
   const ds = await getDb();
@@ -13,7 +13,7 @@ async function resolveAgentToken(restaurantId: string): Promise<string | null> {
 }
 
 async function sipFetch(path: string, agentToken: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${SIP_AGENT_SERVER_URL}/api${path}`, {
+  return fetch(`${SIP_AGENT_INTERNAL_URL}/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

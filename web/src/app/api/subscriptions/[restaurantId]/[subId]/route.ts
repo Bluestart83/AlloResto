@@ -5,8 +5,8 @@ import { ROLE_ADMIN } from "@/lib/roles";
 import { getDb } from "@/lib/db";
 import type { Restaurant } from "@/db/entities/Restaurant";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 // DELETE /api/subscriptions/:restaurantId/:subId — annuler une souscription
@@ -37,7 +37,7 @@ export async function DELETE(
 
   try {
     const resp = await fetch(
-      `${SIP_AGENT_SERVER_URL}/api/subscriptions/${subId}`,
+      `${SIP_AGENT_INTERNAL_URL}/api/subscriptions/${subId}`,
       {
         method: "DELETE",
         headers: {

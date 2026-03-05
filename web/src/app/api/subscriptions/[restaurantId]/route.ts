@@ -5,8 +5,8 @@ import { ROLE_ADMIN } from "@/lib/roles";
 import { getDb } from "@/lib/db";
 import type { Restaurant } from "@/db/entities/Restaurant";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 function apiHeaders(): HeadersInit {
@@ -66,7 +66,7 @@ export async function GET(
 
   try {
     const resp = await fetch(
-      `${SIP_AGENT_SERVER_URL}/api/final-customers/${restaurant.finalCustomerId}/subscriptions`,
+      `${SIP_AGENT_INTERNAL_URL}/api/final-customers/${restaurant.finalCustomerId}/subscriptions`,
       { headers: apiHeaders(), signal: AbortSignal.timeout(10_000) }
     );
     const data = await resp.json();
@@ -91,7 +91,7 @@ export async function POST(
 
   try {
     const resp = await fetch(
-      `${SIP_AGENT_SERVER_URL}/api/final-customers/${restaurant.finalCustomerId}/subscriptions`,
+      `${SIP_AGENT_INTERNAL_URL}/api/final-customers/${restaurant.finalCustomerId}/subscriptions`,
       {
         method: "POST",
         headers: apiHeaders(),

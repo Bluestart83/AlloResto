@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { ROLE_ADMIN } from "@/lib/roles";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 const ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -28,7 +28,7 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
   // ── Build target URL ──
   const { path } = await params;
   const targetPath = path.join("/");
-  const url = new URL(`/api/${targetPath}`, SIP_AGENT_SERVER_URL);
+  const url = new URL(`/api/${targetPath}`, SIP_AGENT_INTERNAL_URL);
 
   // Forward query params
   req.nextUrl.searchParams.forEach((value, key) => {

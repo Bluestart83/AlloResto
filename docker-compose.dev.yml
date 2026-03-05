@@ -6,7 +6,7 @@
 # (via son propre docker-compose.dev.yml ou en bare metal).
 #
 # .env requis :
-#   SIP_AGENT_SERVER_URL=http://host.docker.internal:4000
+#   SIP_AGENT_INTERNAL_URL=http://host.docker.internal:4000
 #   SIP_ACCOUNT_API_KEY=acc_xxx
 
 services:
@@ -23,7 +23,7 @@ services:
     environment:
       DATABASE_TYPE: sqlite
       DATABASE_URL: /data/database.db
-      SIP_AGENT_SERVER_URL: http://host.docker.internal:4000
+      SIP_AGENT_INTERNAL_URL: http://host.docker.internal:4000
       NODE_ENV: development
     volumes:
       - ./data:/data

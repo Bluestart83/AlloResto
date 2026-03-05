@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { ROLE_ADMIN } from "@/lib/roles";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 function apiHeaders(): HeadersInit {
@@ -53,11 +53,11 @@ export async function GET() {
 
   try {
     const [agentsResp, bridgesResp] = await Promise.all([
-      fetch(`${SIP_AGENT_SERVER_URL}/api/agents`, {
+      fetch(`${SIP_AGENT_INTERNAL_URL}/api/agents`, {
         headers: apiHeaders(),
         signal: AbortSignal.timeout(5000),
       }),
-      fetch(`${SIP_AGENT_SERVER_URL}/api/bridges`, {
+      fetch(`${SIP_AGENT_INTERNAL_URL}/api/bridges`, {
         headers: apiHeaders(),
         signal: AbortSignal.timeout(5000),
       }),

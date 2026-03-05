@@ -3,8 +3,8 @@ import { getDb } from "@/lib/db";
 import type { Restaurant } from "@/db/entities/Restaurant";
 import { Not, IsNull } from "typeorm";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 const SIP_ACCOUNT_API_KEY = process.env.SIP_ACCOUNT_API_KEY || "";
 
 /**
@@ -31,7 +31,7 @@ export async function GET() {
 
   for (const r of toMigrate) {
     try {
-      const resp = await fetch(`${SIP_AGENT_SERVER_URL}/api/agents/${r.agentId}`, {
+      const resp = await fetch(`${SIP_AGENT_INTERNAL_URL}/api/agents/${r.agentId}`, {
         headers: {
           "Content-Type": "application/json",
           ...(SIP_ACCOUNT_API_KEY ? { "X-API-Key": SIP_ACCOUNT_API_KEY } : {}),

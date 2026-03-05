@@ -16,8 +16,8 @@ import type { Restaurant } from "@/db/entities/Restaurant";
 import { MoreThanOrEqual } from "typeorm";
 import { getExchangeRate } from "@/services/exchange-rate.service";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -49,7 +49,7 @@ async function fetchCalls(
   from: Date,
   limit = 200,
 ): Promise<any[]> {
-  const url = new URL("/api/calls", SIP_AGENT_SERVER_URL);
+  const url = new URL("/api/calls", SIP_AGENT_INTERNAL_URL);
   url.searchParams.set("from", from.toISOString());
   url.searchParams.set("limit", String(limit));
 

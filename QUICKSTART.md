@@ -45,7 +45,7 @@ npx tsx scripts/seed-alloresto.ts
 
 ## Mise en prod — Cloudflare
 
-Si `SIP_AGENT_SERVER_URL` pointe vers un domaine protege par Cloudflare (ex: `https://iagent.nolimitdev.net`),
+Si `SIP_AGENT_INTERNAL_URL` pointe vers un domaine protege par Cloudflare (ex: `https://iagent.nolimitdev.net`),
 il faut **whitelister l'IP publique du serveur AlloResto** dans Cloudflare pour eviter le blocage WAF/Bot Protection
 sur les appels serveur-to-serveur.
 
@@ -58,7 +58,7 @@ sur les appels serveur-to-serveur.
 | `DATABASE_URL` | `../data/database.db` | Chemin SQLite ou URL PostgreSQL |
 | `OPENAI_API_KEY` | | Cle OpenAI (scan menu) |
 | `GOOGLE_MAPS_API_KEY` | | Geocodage + distance |
-| `SIP_AGENT_SERVER_URL` | `http://localhost:4000` | API sip-agent-server |
+| `SIP_AGENT_INTERNAL_URL` | `http://localhost:4000` | API sip-agent-server |
 | `ENCRYPTION_KEY` | | AES-256 pour SIP passwords (`openssl rand -hex 32`) |
 | `BETTER_AUTH_SECRET` | | Secret Better Auth (`openssl rand -base64 32`) |
 | `BETTER_AUTH_URL` | `http://localhost:3000` | URL publique Better Auth |

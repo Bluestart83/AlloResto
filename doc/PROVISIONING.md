@@ -47,7 +47,7 @@ AlloResto                          sip-agent-server
 
 | Variable d'env | Valeur par defaut | Description |
 |----------------|-------------------|-------------|
-| `SIP_AGENT_SERVER_URL` | `http://localhost:4000` | URL de l'API sip-agent-server |
+| `SIP_AGENT_INTERNAL_URL` | `http://localhost:4000` | URL de l'API sip-agent-server |
 | `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | URL d'AlloResto (pour externalSessionUrl) |
 
 ## Resilience

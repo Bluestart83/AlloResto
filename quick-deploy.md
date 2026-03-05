@@ -27,7 +27,7 @@ ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
 
 Le compose ajoute automatiquement :
-- `SIP_AGENT_SERVER_URL=http://sip-agent-server-api:4000`
+- `SIP_AGENT_INTERNAL_URL=http://sip-agent-server-api:4000`
 - `ALLORESTO_CALLBACK_URL=http://alloresto:3000`
 - `DATABASE_URL=/data/database.db`
 

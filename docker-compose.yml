@@ -9,7 +9,7 @@
 #
 # .env requis : voir .env.example
 # Variables critiques :
-#   SIP_AGENT_SERVER_URL=https://iagent.nolimitdev.net
+#   SIP_AGENT_INTERNAL_URL=https://iagent.nolimitdev.net
 #   SIP_ACCOUNT_API_KEY=acc_xxx
 #   ALLORESTO_CALLBACK_URL=https://resto.nolimitdev.net
 #   CLOUDFLARE_TUNNEL_TOKEN=<token du tunnel "alloresto">

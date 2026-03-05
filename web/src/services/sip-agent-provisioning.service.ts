@@ -11,8 +11,8 @@
 
 import { ALLORESTO_TOOL_DEFINITIONS } from "./sip-agent-tool-definitions";
 
-const SIP_AGENT_SERVER_URL =
-  process.env.SIP_AGENT_SERVER_URL || "http://localhost:4000";
+const SIP_AGENT_INTERNAL_URL =
+  process.env.SIP_AGENT_INTERNAL_URL || "http://localhost:4000";
 const ALLORESTO_URL =
   process.env.ALLORESTO_CALLBACK_URL || "http://alloresto:3000";
 
@@ -35,7 +35,7 @@ async function sipFetch(
   if (SIP_ACCOUNT_API_KEY) {
     headers["X-API-Key"] = SIP_ACCOUNT_API_KEY;
   }
-  return fetch(`${SIP_AGENT_SERVER_URL}/api${path}`, {
+  return fetch(`${SIP_AGENT_INTERNAL_URL}/api${path}`, {
     ...init,
     headers,
     signal: AbortSignal.timeout(10_000),

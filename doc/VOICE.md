@@ -267,7 +267,7 @@ Le script `scripts/seed-alloresto.ts` dans sip-agent-server cree les objets nece
 
 | Variable                | Defaut                    | Description                                      |
 | ----------------------- | ------------------------- | ------------------------------------------------ |
-| `SIP_AGENT_SERVER_URL`  | `http://localhost:4000`   | URL de sip-agent-server                          |
+| `SIP_AGENT_INTERNAL_URL`  | `http://localhost:4000`   | URL de sip-agent-server                          |
 | `ENCRYPTION_KEY`        | _(requis)_                | Cle AES-256 pour chiffrement SIP (64 hex chars)  |
 | `SIP_DOMAIN`            | `sip.twilio.com`          | Domaine SIP fallback (ligne demo)                |
 | `SIP_USERNAME`          | _(vide)_                  | Username SIP fallback                            |
