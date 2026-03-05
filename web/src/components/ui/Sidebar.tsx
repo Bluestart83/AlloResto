@@ -183,6 +183,15 @@ export default function Sidebar({ restaurantId, restaurantName }: SidebarProps) 
         >
           <i className="bi bi-gear me-1"></i>Paramètres
         </Link>
+        {restaurantId && (
+          <Link
+            href={`/place/${restaurantId}/agent`}
+            className={`nav-link px-0 py-1${pathname.startsWith(`/place/${restaurantId}/agent`) ? " active" : ""}`}
+            style={{ fontSize: "0.8rem" }}
+          >
+            <i className="bi bi-robot me-1"></i>Agent IA
+          </Link>
+        )}
         <Link
           href="/account/password"
           className="nav-link px-0 py-1"
