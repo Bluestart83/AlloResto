@@ -2,15 +2,15 @@ FROM node:24-slim
 
 WORKDIR /app
 
-# billing-ui: pack as npm tarball then install as real package
-COPY packages/billing-ui ./packages/billing-ui
-RUN cd packages/billing-ui && npm pack --silent
+# iagent-lib/billing: pack as npm tarball then install as real package
+COPY packages/iagent-lib ./packages/iagent-lib
+RUN cd packages/iagent-lib/packages/billing && npm pack --silent
 
-# Install deps (strip billing-ui from package.json — installed via tarball below)
+# Install deps (strip @nld/billing from package.json — installed via tarball below)
 COPY web/package.json web/package-lock.json* ./
-RUN sed -i '/"@nld\/billing-ui"/d' package.json
+RUN sed -i '/"@nld\/billing"/d' package.json
 RUN npm install
-RUN npm install packages/billing-ui/nld-billing-ui-*.tgz
+RUN npm install packages/iagent-lib/packages/billing/nld-billing-*.tgz
 
 # Copy source
 COPY web/ .

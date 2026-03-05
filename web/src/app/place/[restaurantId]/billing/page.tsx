@@ -1,8 +1,8 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { BillingDashboard } from "@nld/billing-ui";
-import type { BillingApi } from "@nld/billing-ui";
+import { BillingDashboard } from "@nld/billing";
+import type { BillingApi } from "@nld/billing";
 
 const STRIPE_PK = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";
 const BILLING_CURRENCY = process.env.NEXT_PUBLIC_BILLING_CURRENCY || "EUR";

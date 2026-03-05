@@ -15,3 +15,5 @@ __pycache__/
 venv/
 .claude/
 web/tsconfig.tsbuildinfo
+# iagent-lib has its own git repo
+packages/iagent-lib/
