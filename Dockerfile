@@ -8,9 +8,9 @@ RUN cd packages/iagent-lib/packages/billing && npm pack --silent
 
 # Install deps (strip @nld/billing from package.json — installed via tarball below)
 COPY web/package.json web/package-lock.json* ./
-RUN sed -i '/"@nld\/billing"/d' package.json
+RUN sed -i '/"@nld\/iagent-lib"/d' package.json
 RUN npm install
-RUN npm install packages/iagent-lib/packages/billing/nld-billing-*.tgz
+RUN npm install packages/iagent-lib/packages/billing/nld-iagent-lib-*.tgz
 
 # Copy source
 COPY web/ .

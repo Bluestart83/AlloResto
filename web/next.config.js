@@ -1,12 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@nld/billing-ui"],
+  transpilePackages: ["@nld/iagent-lib"],
   serverExternalPackages: ["typeorm", "better-sqlite3"],
-  turbopack: {
-    resolveAlias: {
-      "@nld/billing-ui": "./packages/billing-ui/src/index.ts",
-    },
-  },
 };
 
 module.exports = nextConfig;
