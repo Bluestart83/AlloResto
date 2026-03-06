@@ -1,0 +1,3 @@
+[submodule "packages/iagent-lib"]
+	path = packages/iagent-lib
+	url = git@gitlab.com:iagent2/iagent-lib.git
